@@ -348,7 +348,7 @@ export default function OrderManagementPage() {
                             }
                           }
                           return (
-                            <div key={typeof item.productId === 'object' && item.productId !== null ? item.productId._id : item.productId || idx} className="flex items-center">
+                            <div key={typeof item.productId === 'object' && item.productId !== null ? String(item.productId._id) : String(item.productId) || String(idx)} className="flex items-center">
                               <span>{productName}</span>
                             </div>
                           );
@@ -362,7 +362,7 @@ export default function OrderManagementPage() {
                     <div className="space-y-1">
                       {order.items && order.items.length > 0 ? (
                         order.items.map((item, idx) => (
-                          <div key={item.productId || idx}>
+                          <div key={typeof item.productId === 'object' && item.productId !== null ? String(item.productId._id) : String(item.productId) || String(idx)}>
                             {item.quantity}
                           </div>
                         ))

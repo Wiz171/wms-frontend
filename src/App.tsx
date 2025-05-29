@@ -9,6 +9,8 @@ import ProductManagementPage from './pages/ProductManagementPage';
 import CustomerManagementPage from './pages/CustomerManagementPage';
 import OrderManagementPage from './pages/OrderManagementPage';
 import TaskManagementPage from './pages/TaskManagementPage';
+import RoleManagementPage from './pages/RoleManagementPage';
+import UserProfilePage from './pages/UserProfilePage';
 import { apiRequest, logout } from './api';
 import type { User } from './api';
 
@@ -169,6 +171,30 @@ function App() {
             user ? (
               <Layout user={user} onLogout={handleLogout}>
                 <TaskManagementPage />
+              </Layout>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+        <Route
+          path="/roles"
+          element={
+            user && user.role === 'superadmin' ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <RoleManagementPage />
+              </Layout>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <UserProfilePage />
               </Layout>
             ) : (
               <Navigate to="/login" replace />

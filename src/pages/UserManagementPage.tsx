@@ -125,10 +125,13 @@ export default function UserManagementPage() {
     setIsModalOpen(true);
   };
 
-  const filteredUsers = users.filter(user =>
-    user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filter out superadmin for managers
+  const filteredUsers = users.filter(user => {
+    if (window.localStorage.getItem('role') === 'manager') {
+      return user.role !== 'superadmin';
+    }
+    return true;
+  });
 
   if (loading) {
     return (

@@ -10,6 +10,8 @@ import {
   Bars3Icon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
+import ChangePasswordModal from './ChangePasswordModal';
+import AvatarUploadModal from './AvatarUploadModal';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -27,13 +29,29 @@ const navigation = [
   { name: 'Customers', href: '/customers', icon: UserGroupIcon, roles: ['superadmin', 'manager'] },
   { name: 'Orders', href: '/orders', icon: ShoppingCartIcon, roles: ['superadmin', 'manager'] },
   { name: 'Tasks', href: '/tasks', icon: ClipboardDocumentListIcon, roles: ['superadmin', 'manager', 'user'] },
+  { name: 'Roles', href: '/roles', icon: UsersIcon, roles: ['superadmin'] },
+  { name: 'Profile', href: '/profile', icon: UsersIcon, roles: ['superadmin', 'manager', 'user'] },
 ];
 
 export default function Layout({ children, user, onLogout }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  // Add state for password and avatar modals
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showAvatarUpload, setShowAvatarUpload] = useState(false);
   const location = useLocation();
 
   const filteredNavigation = navigation.filter(item => item.roles.includes(user.role));
+
+  // Add a click-away handler to close the menu when clicking outside
+  React.useEffect(() => {
+    if (!profileMenuOpen) return;
+    function handleClick(e: MouseEvent) {
+      setProfileMenuOpen(false);
+    }
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [profileMenuOpen]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -102,20 +120,67 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
           <div className="border-t border-gray-200 p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center">
-                <div className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
+                <button
+                  className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary-500 relative"
+                  onClick={e => {
+                    e.stopPropagation();
+                    setProfileMenuOpen((v) => !v);
+                  }}
+                  aria-label="Open user menu"
+                  type="button"
+                >
                   <span className="text-primary-600 font-medium">{user.name[0]}</span>
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm font-medium text-gray-700">{user.name}</p>
+                  <svg
+                    className={`absolute -right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 transition-transform ${profileMenuOpen ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                <div className="ml-3 relative">
+                  <button
+                    className="text-sm font-medium text-gray-700 hover:underline focus:outline-none"
+                    onClick={e => {
+                      e.stopPropagation();
+                      setProfileMenuOpen((v) => !v);
+                    }}
+                  >
+                    {user.name}
+                  </button>
                   <p className="text-xs text-gray-500">{user.role}</p>
+                  {profileMenuOpen && (
+                    <div className="absolute left-0 mt-2 w-48 bg-white border border-gray-200 rounded shadow-lg z-50">
+                      <Link
+                        to="/profile"
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setProfileMenuOpen(false)}
+                      >
+                        View Profile
+                      </Link>
+                      <button
+                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => { setProfileMenuOpen(false); setShowChangePassword(true); }}
+                      >
+                        Change Password
+                      </button>
+                      <button
+                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => { setProfileMenuOpen(false); setShowAvatarUpload(true); }}
+                      >
+                        Upload Avatar
+                      </button>
+                      <button
+                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={onLogout}
+                      >
+                        Logout
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
-              <button
-                onClick={onLogout}
-                className="text-sm text-gray-500 hover:text-gray-700"
-              >
-                Logout
-              </button>
             </div>
           </div>
         </div>
@@ -123,7 +188,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
 
       {/* Main content */}
       <div className="lg:pl-64">
-        <div className="sticky top-0 z-10 flex h-16 flex-shrink-0 bg-white shadow">
+        <div className="sticky top-0 z-10 flex h-16 flex-shrink-0 bg-white shadow items-center justify-between px-4">
           <button
             type="button"
             className="px-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500 lg:hidden"
@@ -131,12 +196,16 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
           >
             <Bars3Icon className="h-6 w-6" />
           </button>
-          <div className="flex flex-1 justify-between px-4">
-            <div className="flex flex-1">
-              <h1 className="text-2xl font-semibold text-gray-900 my-auto">
-                {filteredNavigation.find(item => item.href === location.pathname)?.name || 'Dashboard'}
-              </h1>
-            </div>
+          <div className="flex flex-1 items-center justify-between">
+            <h1 className="text-2xl font-semibold text-gray-900 my-auto">
+              {filteredNavigation.find(item => item.href === location.pathname)?.name || 'Dashboard'}
+            </h1>
+            <button
+              className="ml-4 px-4 py-2 rounded bg-red-500 text-white hover:bg-red-600 focus:outline-none"
+              onClick={onLogout}
+            >
+              Logout
+            </button>
           </div>
         </div>
 
@@ -146,6 +215,14 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
           </div>
         </main>
       </div>
+
+      {/* Modals for password and avatar */}
+      {showChangePassword && (
+        <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+      )}
+      {showAvatarUpload && (
+        <AvatarUploadModal onClose={() => setShowAvatarUpload(false)} />
+      )}
     </div>
   );
-} 
+}

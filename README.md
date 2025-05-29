@@ -29,6 +29,36 @@ This project is a Vite + React + TypeScript frontend for the user-management RBA
 - Update API endpoints in `src/api/` to match your backend.
 - Replace placeholder assets as needed.
 
+## Deployment to Netlify
+
+### Prerequisites
+- Netlify account
+- Backend API deployed and accessible (e.g., on Heroku)
+
+### Steps
+1. Build the frontend:
+   ```bash
+   npm run build
+   ```
+2. Deploy to Netlify:
+   - Drag and drop the `dist/` folder in the Netlify UI, or
+   - Use the Netlify CLI:
+     ```bash
+     npm install -g netlify-cli
+     netlify deploy --prod --dir=dist
+     ```
+3. Set the API URL environment variable in Netlify:
+   - In the Netlify dashboard, go to Site settings > Environment variables
+   - Add `VITE_API_URL` and set it to your backend API URL (e.g., `https://your-backend.herokuapp.com`)
+
+### Netlify Build Settings
+- **Build command:** `npm run build`
+- **Publish directory:** `dist`
+- **Environment variable:** `VITE_API_URL` (must point to your backend API)
+
+### Required Environment Variables
+- `VITE_API_URL` — URL of your backend API (e.g., Heroku app URL)
+
 ---
 
 For more details, see `.github/copilot-instructions.md`.

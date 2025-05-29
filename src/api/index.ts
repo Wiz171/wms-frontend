@@ -1,7 +1,7 @@
 // API utility for backend communication
 // Update BASE_URL to match your backend server
 
-const BASE_URL = 'http://localhost:8080';
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 // API Response Types
 export interface ApiResponse<T = any> {
@@ -136,6 +136,7 @@ export async function login(email: string, password: string): Promise<LoginRespo
 
   if (result.status === 'success' && result.data?.token && result.data?.user) {
     localStorage.setItem('token', result.data.token);
+    localStorage.setItem('role', result.data.user.role); // Store user role for filtering
     console.log('Login successful:', { 
       email,
       role: result.data.user.role

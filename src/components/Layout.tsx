@@ -31,6 +31,7 @@ const navigation = [
   { name: 'Tasks', href: '/tasks', icon: ClipboardDocumentListIcon, roles: ['superadmin', 'manager', 'user'] },
   { name: 'Roles', href: '/roles', icon: UsersIcon, roles: ['superadmin'] },
   { name: 'Profile', href: '/profile', icon: UsersIcon, roles: ['superadmin', 'manager', 'user'] },
+  { name: 'Logs', href: '/logs', icon: ClipboardDocumentListIcon, roles: ['superadmin', 'manager', 'user'] },
 ];
 
 export default function Layout({ children, user, onLogout }: LayoutProps) {

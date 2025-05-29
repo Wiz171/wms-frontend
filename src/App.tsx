@@ -11,6 +11,7 @@ import OrderManagementPage from './pages/OrderManagementPage';
 import TaskManagementPage from './pages/TaskManagementPage';
 import RoleManagementPage from './pages/RoleManagementPage';
 import UserProfilePage from './pages/UserProfilePage';
+import LogViewerPage from './pages/LogViewerPage';
 import { apiRequest, logout } from './api';
 import type { User } from './api';
 
@@ -195,6 +196,18 @@ function App() {
             user ? (
               <Layout user={user} onLogout={handleLogout}>
                 <UserProfilePage />
+              </Layout>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+        <Route
+          path="/logs"
+          element={
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <LogViewerPage />
               </Layout>
             ) : (
               <Navigate to="/login" replace />

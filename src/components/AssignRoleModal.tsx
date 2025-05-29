@@ -1,6 +1,4 @@
-import React, { useEffect, useState } from 'react';
-import { apiRequest } from '../api';
-import toast from 'react-hot-toast';
+import { useEffect, useState } from 'react';
 
 interface User {
   id: string;
@@ -13,17 +11,6 @@ interface Role {
   role: string;
   permissions: Record<string, string[]>;
 }
-
-const MODULES = [
-  'users',
-  'products',
-  'customers',
-  'purchase_orders',
-  'orders',
-  'tasks',
-  'dashboard',
-];
-const ACTIONS = ['create', 'read', 'update', 'delete', 'manage'];
 
 export default function AssignRoleModal({ open, onClose, users, roles, onAssign }: {
   open: boolean;

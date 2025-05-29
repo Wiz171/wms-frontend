@@ -2,13 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../api';
 import toast from 'react-hot-toast';
 import {
-  PencilIcon,
   TrashIcon,
   PlusIcon,
   MagnifyingGlassIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  ClockIcon,
 } from '@heroicons/react/24/outline';
 import dayjs from 'dayjs';
 
@@ -352,7 +348,7 @@ export default function OrderManagementPage() {
                             }
                           }
                           return (
-                            <div key={idx} className="flex items-center">
+                            <div key={typeof item.productId === 'object' && item.productId !== null ? item.productId._id : item.productId || idx} className="flex items-center">
                               <span>{productName}</span>
                             </div>
                           );
@@ -445,7 +441,7 @@ export default function OrderManagementPage() {
                       <label htmlFor={`product-select-${index}`} className="sr-only">Product</label>
                       <select
                         id={`product-select-${index}`}
-                        value={item.productId}
+                        value={typeof item.productId === 'object' && item.productId !== null ? item.productId._id : item.productId}
                         onChange={(e) => {
                           const selectedProduct = products.find(p => p.id === e.target.value);
                           const newItems = [...formData.items];

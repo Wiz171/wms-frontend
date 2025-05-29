@@ -3,11 +3,6 @@ import { login, type User, apiRequest } from '../api';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 
-interface LoginResponse {
-  token: string;
-  user: User;
-}
-
 export default function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

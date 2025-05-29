@@ -46,7 +46,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
   // Add a click-away handler to close the menu when clicking outside
   React.useEffect(() => {
     if (!profileMenuOpen) return;
-    function handleClick(e: MouseEvent) {
+    function handleClick() {
       setProfileMenuOpen(false);
     }
     document.addEventListener('click', handleClick);

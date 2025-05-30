@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { logAction } from '../utils/log';
+import { useState, useEffect } from 'react';
 
 interface LogEntry {
   action: string;

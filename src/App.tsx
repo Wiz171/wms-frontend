@@ -12,7 +12,7 @@ import TaskManagementPage from './pages/TaskManagementPage';
 import RoleManagementPage from './pages/RoleManagementPage';
 import UserProfilePage from './pages/UserProfilePage';
 import LogViewerPage from './pages/LogViewerPage';
-import { apiRequest, logout } from './api';
+import { apiRequest, logout, setUserForLogging } from './api';
 import type { User } from './api';
 
 function App() {
@@ -47,6 +47,10 @@ function App() {
 
   useEffect(() => {
     console.log('[App] user state changed:', user);
+  }, [user]);
+
+  useEffect(() => {
+    if (user) setUserForLogging(user);
   }, [user]);
 
   const handleLogout = async () => {
@@ -90,7 +94,7 @@ function App() {
               <LoginPage 
                 onLogin={(userData: User) => {
                   setUser(userData);
-                  toast.success('Login successful!');
+                  setUserForLogging(userData);
                 }} 
               />
             )

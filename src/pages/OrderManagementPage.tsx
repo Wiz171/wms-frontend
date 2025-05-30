@@ -7,6 +7,7 @@ import {
   MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 import dayjs from 'dayjs';
+import { logAction } from '../utils/log';
 
 interface Order {
   id: string;
@@ -148,19 +149,33 @@ export default function OrderManagementPage() {
     };
 
     try {
+      let response: any;
       if (editingOrder) {
-        await apiRequest(`/api/orders/${editingOrder.id}`, {
+        response = await apiRequest(`/api/orders/${editingOrder.id}`, {
           method: 'PATCH',
           body: JSON.stringify(orderData),
         });
         toast.success('Order updated successfully');
+        logAction({
+          action: 'update',
+          entity: 'order',
+          entityId: editingOrder.id,
+          user: JSON.parse(localStorage.getItem('user') || '{}'),
+          details: { customerName: orderData.customerName }
+        });
       } else {
-        const response = await apiRequest('/api/orders', {
+        response = await apiRequest('/api/orders', {
           method: 'POST',
           body: JSON.stringify(orderData),
         });
-        console.log('Order creation response:', response);
         toast.success('Order created successfully');
+        logAction({
+          action: 'create',
+          entity: 'order',
+          entityId: response?.id,
+          user: JSON.parse(localStorage.getItem('user') || '{}'),
+          details: { customerName: orderData.customerName }
+        });
       }
       setIsModalOpen(false);
       setEditingOrder(null);
@@ -170,9 +185,7 @@ export default function OrderManagementPage() {
       });
       fetchOrders();
     } catch (error: any) {
-      console.error('Order submission error:', error);
-      const errorMessage = error.message || (editingOrder ? 'Failed to update order' : 'Failed to create order');
-      toast.error(errorMessage);
+      toast.error(error.message || 'Failed to save order');
     }
   };
 

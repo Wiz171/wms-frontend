@@ -160,6 +160,11 @@ export async function logout(): Promise<void> {
   }
 }
 
+// Store user info in localStorage for logging
+export function setUserForLogging(user: User) {
+  localStorage.setItem('user', JSON.stringify(user));
+}
+
 // Generic CRUD operations
 export async function getItems<T>(endpoint: string): Promise<T[]> {
   return apiRequest<T[]>(endpoint);

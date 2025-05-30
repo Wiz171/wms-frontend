@@ -1,6 +1,20 @@
 import React, { useState } from 'react';
 import { apiRequest } from '../api';
 import toast from 'react-hot-toast';
+import { logAction } from '../utils/log';
+
+// Declare global property for deduplication
+declare global {
+  interface Window {
+    __toastShown?: boolean;
+  }
+}
+
+// @ts-ignore
+if (typeof window !== 'undefined' && window.__toastShown === undefined) {
+  // @ts-ignore
+  window.__toastShown = false;
+}
 
 export default function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   const [current, setCurrent] = useState('');
@@ -10,8 +24,14 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
 
   const handleChange = async (e: React.FormEvent) => {
     e.preventDefault();
+    // @ts-ignore
     if (next !== confirm) {
-      toast.error('Passwords do not match');
+      if (!window.__toastShown) {
+        toast.error('Passwords do not match');
+        // @ts-ignore
+        window.__toastShown = true;
+        setTimeout(() => { window.__toastShown = false; }, 1000);
+      }
       return;
     }
     setLoading(true);
@@ -20,10 +40,36 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
         method: 'POST',
         body: JSON.stringify({ currentPassword: current, newPassword: next }),
       });
-      toast.success('Password changed successfully');
+      // Log password change
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      logAction({
+        action: 'update',
+        entity: 'user-password',
+        entityId: user.id,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role
+        },
+        details: { message: 'Password changed' }
+      });
+      // @ts-ignore
+      if (!window.__toastShown) {
+        toast.success('Password changed successfully');
+        // @ts-ignore
+        window.__toastShown = true;
+        setTimeout(() => { window.__toastShown = false; }, 1000);
+      }
       onClose();
     } catch {
-      toast.error('Failed to change password');
+      // @ts-ignore
+      if (!window.__toastShown) {
+        toast.error('Failed to change password');
+        // @ts-ignore
+        window.__toastShown = true;
+        setTimeout(() => { window.__toastShown = false; }, 1000);
+      }
     } finally {
       setLoading(false);
     }

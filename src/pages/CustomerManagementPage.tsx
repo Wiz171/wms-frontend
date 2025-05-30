@@ -10,6 +10,7 @@ import {
   PhoneIcon,
   MapPinIcon,
 } from '@heroicons/react/24/outline';
+import { logAction } from '../utils/log';
 
 interface Customer {
   id: string;
@@ -68,18 +69,33 @@ export default function CustomerManagementPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      let response: any;
       if (editingCustomer) {
-        await apiRequest(`/api/customers/${editingCustomer.id}`, {
+        response = await apiRequest(`/api/customers/${editingCustomer.id}`, {
           method: 'PATCH',
           body: JSON.stringify(formData),
         });
         toast.success('Customer updated successfully');
+        logAction({
+          action: 'update',
+          entity: 'customer',
+          entityId: editingCustomer.id,
+          user: JSON.parse(localStorage.getItem('user') || '{}'),
+          details: { name: formData.name, email: formData.email }
+        });
       } else {
-        await apiRequest('/api/customers', {
+        response = await apiRequest('/api/customers', {
           method: 'POST',
           body: JSON.stringify(formData),
         });
         toast.success('Customer created successfully');
+        logAction({
+          action: 'create',
+          entity: 'customer',
+          entityId: response?.customer?.id,
+          user: JSON.parse(localStorage.getItem('user') || '{}'),
+          details: { name: formData.name, email: formData.email }
+        });
       }
       setIsModalOpen(false);
       setEditingCustomer(null);
@@ -92,8 +108,8 @@ export default function CustomerManagementPage() {
         type: 'individual',
       });
       fetchCustomers();
-    } catch (error) {
-      toast.error(editingCustomer ? 'Failed to update customer' : 'Failed to create customer');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save customer');
     }
   };
 

@@ -3,6 +3,17 @@ import { apiRequest, logout } from '../api';
 import toast from 'react-hot-toast';
 import ChangePasswordModal from '../components/ChangePasswordModal';
 import { useNavigate } from 'react-router-dom';
+import { logAction } from '../utils/log';
+
+declare global {
+  interface Window {
+    __toastShown?: boolean;
+  }
+}
+
+if (typeof window !== 'undefined' && window.__toastShown === undefined) {
+  window.__toastShown = false;
+}
 
 export default function UserProfilePage() {
   const [profile, setProfile] = useState<any>(null);
@@ -39,17 +50,43 @@ export default function UserProfilePage() {
         method: 'PUT',
         body: JSON.stringify(form),
       });
-      toast.success('Profile updated');
       setProfile(form);
       setEdit(false);
+      // Log profile update
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      logAction({
+        action: 'update',
+        entity: 'user-profile',
+        entityId: user.id,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role
+        },
+        details: { updatedFields: Object.keys(form) }
+      });
+      if (!window.__toastShown) {
+        toast.success('Profile updated');
+        window.__toastShown = true;
+        setTimeout(() => { window.__toastShown = false; }, 1000);
+      }
     } catch {
-      toast.error('Failed to update profile');
+      if (!window.__toastShown) {
+        toast.error('Failed to update profile');
+        window.__toastShown = true;
+        setTimeout(() => { window.__toastShown = false; }, 1000);
+      }
     }
   };
 
   const handleLogout = async () => {
     await logout();
-    toast.success('Logged out successfully');
+    if (!window.__toastShown) {
+      toast.success('Logged out successfully');
+      window.__toastShown = true;
+      setTimeout(() => { window.__toastShown = false; }, 1000);
+    }
     navigate('/login');
   };
 

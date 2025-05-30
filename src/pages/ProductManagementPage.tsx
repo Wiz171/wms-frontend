@@ -7,6 +7,7 @@ import {
   PlusIcon,
   MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
+import { logAction } from '../utils/log';
 
 interface Product {
   id: string;
@@ -74,22 +75,37 @@ export default function ProductManagementPage() {
       formData.specs.forEach(spec => {
         if (spec.key) specsObj[spec.key] = spec.value;
       });
-      const submitData = {
+      const productData = {
         ...formData,
         specs: specsObj,
       };
+      let response: any;
       if (editingProduct) {
-        await apiRequest(`/api/products/${editingProduct.id}`, {
+        response = await apiRequest(`/api/products/${editingProduct.id}`, {
           method: 'PATCH',
-          body: JSON.stringify(submitData),
+          body: JSON.stringify(productData),
         });
         toast.success('Product updated successfully');
+        logAction({
+          action: 'update',
+          entity: 'product',
+          entityId: editingProduct.id,
+          user: JSON.parse(localStorage.getItem('user') || '{}'),
+          details: { name: productData.name }
+        });
       } else {
-        await apiRequest('/api/products', {
+        response = await apiRequest('/api/products', {
           method: 'POST',
-          body: JSON.stringify(submitData),
+          body: JSON.stringify(productData),
         });
         toast.success('Product created successfully');
+        logAction({
+          action: 'create',
+          entity: 'product',
+          entityId: response?.product?.id,
+          user: JSON.parse(localStorage.getItem('user') || '{}'),
+          details: { name: productData.name }
+        });
       }
       setIsModalOpen(false);
       setEditingProduct(null);
@@ -103,8 +119,8 @@ export default function ProductManagementPage() {
         specs: [{ key: '', value: '' }],
       });
       fetchProducts();
-    } catch (error) {
-      toast.error(editingProduct ? 'Failed to update product' : 'Failed to create product');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save product');
     }
   };
 

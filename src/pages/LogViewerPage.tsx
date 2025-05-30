@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logAction } from '../utils/log';
 
 interface LogEntry {
   action: string;

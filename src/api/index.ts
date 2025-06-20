@@ -91,13 +91,16 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
   });
 
   try {
+    // Create a headers object for logging (redacting sensitive info)
+    const logHeaders: Record<string, string> = {};
+    headers.forEach((value, key) => {
+      logHeaders[key] = key.toLowerCase() === 'authorization' ? 'Bearer [REDACTED]' : value;
+    });
+
     console.log('API Request:', {
       url: fullUrl,
       method: options.method || 'GET',
-      headers: {
-        ...headers,
-        Authorization: headers.Authorization ? 'Bearer [REDACTED]' : undefined
-      },
+      headers: logHeaders,
       body: options.body,
     });
 

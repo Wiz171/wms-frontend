@@ -111,17 +111,9 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
       mode: 'cors',
       cache: 'no-cache',
     };
-
-    // Log the request (redacting sensitive info)
-    const logHeaders: Record<string, string> = {};
-    headers.forEach((value, key) => {
-      logHeaders[key] = key.toLowerCase() === 'authorization' ? 'Bearer [REDACTED]' : value;
-    });
     
-    console.log('API Request:', {
-      url: fullUrl,
+    console.log('Fetch Options:', {
       method: fetchOptions.method || 'GET',
-      headers: logHeaders,
       credentials: fetchOptions.credentials,
       mode: fetchOptions.mode
     });

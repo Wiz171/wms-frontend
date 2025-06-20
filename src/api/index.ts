@@ -49,25 +49,19 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
   const isAuthEndpoint = url === '/login' || url === '/logout';
   
   // Create headers object
-  const headers = new Headers();
-  headers.set('Content-Type', 'application/json');
-  headers.set('Accept', 'application/json');
+  const headers = new Headers(options.headers);
   
-  // Add any custom headers from options
-  if (options.headers) {
-    if (options.headers instanceof Headers) {
-      options.headers.forEach((value, key) => {
-        headers.set(key, value);
-      });
-    } else if (Array.isArray(options.headers)) {
-      options.headers.forEach(([key, value]) => {
-        headers.set(key, value);
-      });
-    } else {
-      Object.entries(options.headers as Record<string, string>).forEach(([key, value]) => {
-        headers.set(key, value);
-      });
-    }
+  // Set default headers if not already set
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+  if (!headers.has('Accept')) {
+    headers.set('Accept', 'application/json');
+  }
+  
+  // Add Authorization header if needed
+  if (!isAuthEndpoint && token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
   }
   
   // Add Authorization header if needed
@@ -107,9 +101,11 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
     const fetchOptions: RequestInit = {
       ...options,
       headers: Object.fromEntries(headers.entries()),
-      credentials: 'include' as const,
+      credentials: 'include',
       mode: 'cors',
       cache: 'no-cache',
+      redirect: 'follow',
+      referrerPolicy: 'no-referrer-when-downgrade'
     };
     
     console.log('Fetch Options:', {

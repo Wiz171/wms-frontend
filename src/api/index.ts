@@ -49,12 +49,27 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
   const isAuthEndpoint = url === '/login' || url === '/logout';
   
   // Create headers object
-  const headers = new Headers({
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    ...(options.headers as Record<string, string>)
-  });
-
+  const headers = new Headers();
+  headers.set('Content-Type', 'application/json');
+  headers.set('Accept', 'application/json');
+  
+  // Add any custom headers from options
+  if (options.headers) {
+    if (options.headers instanceof Headers) {
+      options.headers.forEach((value, key) => {
+        headers.set(key, value);
+      });
+    } else if (Array.isArray(options.headers)) {
+      options.headers.forEach(([key, value]) => {
+        headers.set(key, value);
+      });
+    } else {
+      Object.entries(options.headers as Record<string, string>).forEach(([key, value]) => {
+        headers.set(key, value);
+      });
+    }
+  }
+  
   // Add Authorization header if needed
   if (!isAuthEndpoint && token) {
     headers.set('Authorization', `Bearer ${token}`);
@@ -95,15 +110,15 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
     };
 
     // Log the request (redacting sensitive info)
-    const logHeaders = new Headers(headers);
-    if (logHeaders.has('Authorization')) {
-      logHeaders.set('Authorization', 'Bearer [REDACTED]');
-    }
+    const logHeaders: Record<string, string> = {};
+    headers.forEach((value, key) => {
+      logHeaders[key] = key.toLowerCase() === 'authorization' ? 'Bearer [REDACTED]' : value;
+    });
     
     console.log('API Request:', {
       url: fullUrl,
       method: fetchOptions.method || 'GET',
-      headers: Object.fromEntries(logHeaders.entries()),
+      headers: logHeaders,
       credentials: fetchOptions.credentials,
       mode: fetchOptions.mode
     });

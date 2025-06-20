@@ -47,19 +47,25 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
   
   // Don't include Authorization header for login/logout endpoints
   const isAuthEndpoint = url === '/login' || url === '/logout';
-  const headers: Record<string, string> = {
+  
+  // Create headers object
+  const headers = new Headers({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    ...(!isAuthEndpoint && token ? { 'Authorization': `Bearer ${token}` } : {}),
-    ...((options.headers as Record<string, string>) || {}),
-  };
+    ...(options.headers as Record<string, string>)
+  });
+
+  // Add Authorization header if needed
+  if (!isAuthEndpoint && token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
 
   // Ensure no double slash and correct endpoint
   let fullUrl = `${BASE_URL}${url}`.replace(/([^:]\/)\/+/g, '$1'); // Remove any double slashes
   
-  // Ensure URL ends with a single slash if it's a base URL
-  if (!fullUrl.endsWith('/') && !url.includes('?')) {
-    fullUrl = `${fullUrl}/`;
+  // Ensure URL doesn't end with a slash if it's not a base URL
+  if (fullUrl.endsWith('/') && url === '') {
+    fullUrl = fullUrl.slice(0, -1);
   }
   
   // Replace any singular endpoints with their plural forms
@@ -82,21 +88,24 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
 
     const fetchOptions: RequestInit = {
       ...options,
-      headers,
+      headers: Object.fromEntries(headers.entries()),
       credentials: 'include' as const,
       mode: 'cors',
       cache: 'no-cache',
     };
 
-    console.log('API Request Options:', {
+    // Log the request (redacting sensitive info)
+    const logHeaders = new Headers(headers);
+    if (logHeaders.has('Authorization')) {
+      logHeaders.set('Authorization', 'Bearer [REDACTED]');
+    }
+    
+    console.log('API Request:', {
       url: fullUrl,
-      options: {
-        ...fetchOptions,
-        headers: {
-          ...fetchOptions.headers,
-          Authorization: headers.Authorization ? 'Bearer [REDACTED]' : undefined
-        }
-      }
+      method: fetchOptions.method || 'GET',
+      headers: Object.fromEntries(logHeaders.entries()),
+      credentials: fetchOptions.credentials,
+      mode: fetchOptions.mode
     });
 
     const res = await fetch(fullUrl, fetchOptions);

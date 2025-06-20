@@ -49,12 +49,18 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
   const isAuthEndpoint = url === '/login' || url === '/logout';
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(!isAuthEndpoint && token ? { Authorization: `Bearer ${token}` } : {}),
+    'Accept': 'application/json',
+    ...(!isAuthEndpoint && token ? { 'Authorization': `Bearer ${token}` } : {}),
     ...((options.headers as Record<string, string>) || {}),
   };
 
   // Ensure no double slash and correct endpoint
-  let fullUrl = `${BASE_URL}${url}`;
+  let fullUrl = `${BASE_URL}${url}`.replace(/([^:]\/)\/+/g, '$1'); // Remove any double slashes
+  
+  // Ensure URL ends with a single slash if it's a base URL
+  if (!fullUrl.endsWith('/') && !url.includes('?')) {
+    fullUrl = `${fullUrl}/`;
+  }
   
   // Replace any singular endpoints with their plural forms
   Object.entries(ENDPOINT_MAP).forEach(([singular, plural]) => {
@@ -74,11 +80,26 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
       body: options.body,
     });
 
-    const res = await fetch(fullUrl, {
+    const fetchOptions: RequestInit = {
       ...options,
       headers,
-      credentials: 'include',
+      credentials: 'include' as const,
+      mode: 'cors',
+      cache: 'no-cache',
+    };
+
+    console.log('API Request Options:', {
+      url: fullUrl,
+      options: {
+        ...fetchOptions,
+        headers: {
+          ...fetchOptions.headers,
+          Authorization: headers.Authorization ? 'Bearer [REDACTED]' : undefined
+        }
+      }
     });
+
+    const res = await fetch(fullUrl, fetchOptions);
 
     const data = await res.json();
 

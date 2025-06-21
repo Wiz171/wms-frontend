@@ -2,7 +2,7 @@
 const BASE_URL = 'https://tubular-lollipop-52dd52.netlify.app';
 
 // Helper to create headers with auth token
-const createHeaders = (options: RequestInit = {}): Headers => {
+const createHeaders = (url: string, options: RequestInit = {}): Headers => {
   const headers = new Headers(options.headers);
   const token = localStorage.getItem('token');
   
@@ -15,7 +15,7 @@ const createHeaders = (options: RequestInit = {}): Headers => {
   }
   
   // Add auth token if available and not an auth endpoint
-  const isAuthEndpoint = options.url?.includes('/login') || options.url?.includes('/logout');
+  const isAuthEndpoint = url.includes('/login') || url.includes('/logout');
   if (token && !isAuthEndpoint) {
     headers.set('Authorization', `Bearer ${token}`);
   }
@@ -42,44 +42,48 @@ export interface LoginResponse {
   user: User;
 }
 
-// Map of singular to plural endpoints
-const ENDPOINT_MAP = {
-  '/api/order': '/api/orders',
-  '/api/user': '/api/users',
-  '/api/product': '/api/products',
-  '/api/customer': '/api/customers',
-  '/api/task': '/api/tasks'
-};
+// Endpoint mapping for consistency
+// Using direct string checks instead of a map for better type safety
 
 class ApiError extends Error {
   constructor(
-    public status: number,
     message: string,
-    public data?: any
+    public status: number,
+    public data?: any,
+    public url?: string
   ) {
     super(message);
     this.name = 'ApiError';
+    
+    // Maintain proper prototype chain
+    Object.setPrototypeOf(this, ApiError.prototype);
   }
 }
 
 export async function apiRequest<T>(url: string, options: RequestInit = {}): Promise<T> {
-  // Create headers with auth token
-  const headers = createHeaders(options);
-  
   // Ensure URL is properly formatted and remove any double slashes
-  const fullUrl = `${BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`.replace(/([^:]\/)\/+/g, '$1');
+  let processedUrl = `${BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`.replace(/([^:]\/)\/+/g, '$1');
   
   // Ensure URL doesn't end with a slash if it's not a base URL
-  if (fullUrl.endsWith('/') && url === '') {
-    fullUrl = fullUrl.slice(0, -1);
+  if (processedUrl.endsWith('/') && url === '') {
+    processedUrl = processedUrl.slice(0, -1);
   }
   
-  // Replace any singular endpoints with their plural forms
-  Object.entries(ENDPOINT_MAP).forEach(([singular, plural]) => {
-    if (fullUrl === `${BASE_URL}${singular}` || fullUrl.startsWith(`${BASE_URL}${singular}/`)) {
-      fullUrl = fullUrl.replace(singular, plural);
-    }
-  });
+  // Handle pluralization for consistency
+  if (processedUrl.endsWith('/order')) {
+    processedUrl = processedUrl.replace('/order', '/orders');
+  } else if (processedUrl.endsWith('/user')) {
+    processedUrl = processedUrl.replace('/user', '/users');
+  } else if (processedUrl.endsWith('/product')) {
+    processedUrl = processedUrl.replace('/product', '/products');
+  } else if (processedUrl.endsWith('/customer')) {
+    processedUrl = processedUrl.replace('/customer', '/customers');
+  } else if (processedUrl.endsWith('/task')) {
+    processedUrl = processedUrl.replace('/task', '/tasks');
+  }
+  
+  // Create headers with auth token
+  const headers = createHeaders(url, options);
 
   try {
     // Create a headers object for logging (redacting sensitive info)
@@ -89,7 +93,7 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
     });
 
     console.log('API Request:', {
-      url: fullUrl,
+      url: processedUrl,
       method: options.method || 'GET',
       headers: logHeaders,
       body: options.body,
@@ -112,12 +116,12 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
       mode: fetchOptions.mode
     });
 
-    const res = await fetch(fullUrl, fetchOptions);
+    const res = await fetch(processedUrl, fetchOptions);
 
     const data = await res.json();
 
     console.log('API Response:', {
-      url: fullUrl,
+      url: processedUrl,
       status: res.status,
       ok: res.ok,
       data,
@@ -125,38 +129,49 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
 
     if (!res.ok) {
       // Handle authentication errors
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
+        // Handle unauthorized (token expired or invalid)
         localStorage.removeItem('token');
         if (url === '/login') {
           // Show backend error message for login
-          throw new ApiError(res.status, data?.message || 'Invalid email or password', data);
+          throw new ApiError(data?.message || 'Invalid email or password', res.status, data, processedUrl);
         } else {
           window.location.href = '/login';
-          throw new ApiError(res.status, 'Session expired. Please login again.', data);
+          throw new ApiError('Session expired. Please login again.', res.status, data, processedUrl);
         }
       }
-      throw new ApiError(res.status, data?.message || data?.error || 'API request failed', data);
+      throw new ApiError(data?.message || data?.error || 'API request failed', res.status, data, processedUrl);
     }
 
     if (data.status === 'error') {
-      throw new ApiError(res.status, data.message || 'API request failed', data);
+      throw new ApiError(data.message || 'API request failed', res.status, data, processedUrl);
     }
 
-    // For login endpoint, return the entire response
-    if (url === '/login') {
+    // For login/register endpoints, return the entire response
+    if (url === '/login' || url === '/register') {
       return data as T;
     }
 
     // For other endpoints, return the data property if it exists
     return data.data || data;
-  } catch (error) {
+  } catch (err) {
     console.error('API Error:', {
-      url: fullUrl,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      status: error instanceof ApiError ? error.status : undefined,
-      data: error instanceof ApiError ? error.data : undefined
+      url: processedUrl,
+      error: err instanceof Error ? err.message : 'Unknown error',
+      status: (err as any).status,
+      data: (err as any).data
     });
-    throw error;
+
+    if (err instanceof ApiError) {
+      throw err;
+    }
+    
+    throw new ApiError(
+      err instanceof Error ? err.message : 'An unknown error occurred',
+      (err as any).status || 500,
+      (err as any).data,
+      processedUrl
+    );
   }
 }
 

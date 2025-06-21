@@ -1,7 +1,27 @@
 // API utility for backend communication
-// Update BASE_URL to match your backend server
-
 const BASE_URL = 'https://tubular-lollipop-52dd52.netlify.app';
+
+// Helper to create headers with auth token
+const createHeaders = (options: RequestInit = {}): Headers => {
+  const headers = new Headers(options.headers);
+  const token = localStorage.getItem('token');
+  
+  // Set default headers if not provided
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+  if (!headers.has('Accept')) {
+    headers.set('Accept', 'application/json');
+  }
+  
+  // Add auth token if available and not an auth endpoint
+  const isAuthEndpoint = options.url?.includes('/login') || options.url?.includes('/logout');
+  if (token && !isAuthEndpoint) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  
+  return headers;
+};
 
 // API Response Types
 export interface ApiResponse<T = any> {
@@ -43,34 +63,11 @@ class ApiError extends Error {
 }
 
 export async function apiRequest<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('token');
+  // Create headers with auth token
+  const headers = createHeaders(options);
   
-  // Don't include Authorization header for login/logout endpoints
-  const isAuthEndpoint = url === '/login' || url === '/logout';
-  
-  // Create headers object
-  const headers = new Headers(options.headers);
-  
-  // Set default headers if not already set
-  if (!headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json');
-  }
-  if (!headers.has('Accept')) {
-    headers.set('Accept', 'application/json');
-  }
-  
-  // Add Authorization header if needed
-  if (!isAuthEndpoint && token && !headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
-  
-  // Add Authorization header if needed
-  if (!isAuthEndpoint && token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
-
-  // Ensure no double slash and correct endpoint
-  let fullUrl = `${BASE_URL}${url}`.replace(/([^:]\/)\/+/g, '$1'); // Remove any double slashes
+  // Ensure URL is properly formatted and remove any double slashes
+  const fullUrl = `${BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`.replace(/([^:]\/)\/+/g, '$1');
   
   // Ensure URL doesn't end with a slash if it's not a base URL
   if (fullUrl.endsWith('/') && url === '') {
@@ -100,6 +97,7 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
 
     const fetchOptions: RequestInit = {
       ...options,
+      method: options.method || 'GET',
       headers: Object.fromEntries(headers.entries()),
       credentials: 'include',
       mode: 'cors',

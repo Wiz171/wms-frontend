@@ -1,5 +1,5 @@
 // API utility for backend communication
-const BASE_URL = 'https://tubular-lollipop-52dd52.netlify.app';
+const BASE_URL = import.meta.env.VITE_API_URL;
 
 // Helper to create headers with auth token
 const createHeaders = (url: string, options: RequestInit = {}): Headers => {

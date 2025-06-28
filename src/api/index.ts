@@ -156,15 +156,27 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
       // Handle 401/403 specifically
       if (response.status === 401 || response.status === 403) {
         console.error('Auth error - Token might be invalid or expired');
-        // Clear invalid token
-        localStorage.removeItem('token');
-        // Redirect to login page
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+        // Only clear token and redirect if this is not an auth endpoint
+        if (!url.includes('/login') && !url.includes('/register')) {
+          localStorage.removeItem('token');
+          // Redirect to login page only if we're not already there
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+          }
         }
-        throw new ApiError('Session expired. Please login again.', response.status, responseData, processedUrl);
+        throw new ApiError(
+          responseData?.message || 'Session expired. Please login again.', 
+          response.status, 
+          responseData, 
+          processedUrl
+        );
       }
-      throw new ApiError(responseData?.message || responseData?.error || 'API request failed', response.status, responseData, processedUrl);
+      throw new ApiError(
+        responseData?.message || responseData?.error || 'API request failed', 
+        response.status, 
+        responseData, 
+        processedUrl
+      );
     }
 
     if (responseData.status === 'error') {

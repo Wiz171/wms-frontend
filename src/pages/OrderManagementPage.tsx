@@ -378,8 +378,12 @@ export default function OrderManagementPage() {
     try {
       setIsLoading(true);
       
+      console.log('Fetching orders...');
+      const token = localStorage.getItem('token');
+      console.log('Current token:', token ? `${token.substring(0, 10)}...` : 'No token');
+      
       const response = await apiRequest<{ data?: any[] }>('/api/orders');
-      const ordersData = response.data || response;
+      const ordersData = response?.data || response;
       
       console.log('Fetched orders response:', response);
       

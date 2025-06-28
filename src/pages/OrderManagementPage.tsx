@@ -93,7 +93,6 @@ export default function OrderManagementPage() {
   // API data states
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
-  const [processingOrder, setProcessingOrder] = useState<string | null>(null);
   
   // Wrapper functions for state setters to ensure consistent usage
   const setExpandedOrderIdWrapper = React.useCallback((id: string | null) => setExpandedOrderId(id), []);
@@ -503,75 +502,40 @@ export default function OrderManagementPage() {
         expectedDeliveryDate: formData.expectedDeliveryDate
       };
 
-      if (editingOrder) {
-        await apiRequest(`/api/orders/${editingOrder.id}`, {
-          method: 'PUT',
-          data: orderData
-        });
-        toast.success('Order updated successfully');
-      } else {
-        await apiRequest('/api/orders', {
-          method: 'POST',
-          data: orderData
-        });
-        toast.success('Order created successfully');
-      }
-
-      setIsModalOpen(false);
-      setFormData({ customerId: '', items: [] });
-      fetchOrders();
-      
-      await logAction({
-        action: editingOrder ? 'order_updated' : 'order_created',
-        entity: 'order',
-        entityId: editingOrder?.id || 'new',
-        details: orderData
-      });
-    } catch (error: unknown) {
-      console.error('Error submitting order:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to submit order';
-      toast.error(errorMessage);
-    }
-    };
-
-    try {
-      let response: any;
+      let response;
       if (editingOrder) {
         response = await apiRequest(`/api/orders/${editingOrder.id}`, {
           method: 'PATCH',
           body: JSON.stringify(orderData),
         });
         toast.success('Order updated successfully');
-        logAction({
-          action: 'update',
-          entity: 'order',
-          entityId: editingOrder.id,
-          user: JSON.parse(localStorage.getItem('user') || '{}'),
-          details: { customerName: orderData.customerName }
-        });
       } else {
         response = await apiRequest('/api/orders', {
           method: 'POST',
           body: JSON.stringify(orderData),
         });
         toast.success('Order created successfully');
-        logAction({
-          action: 'create',
-          entity: 'order',
-          entityId: response?.id,
-          user: JSON.parse(localStorage.getItem('user') || '{}'),
-          details: { customerName: orderData.customerName }
-        });
       }
+
       setIsModalOpen(false);
       setEditingOrder(null);
       setFormData({
         customerId: '',
         items: [],
       });
-      fetchOrders();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to save order');
+      await fetchOrders();
+      
+      await logAction({
+        action: editingOrder ? 'order_updated' : 'order_created',
+        entity: 'order',
+        entityId: editingOrder?.id || response?.id || 'unknown',
+        user: JSON.parse(localStorage.getItem('user') || '{}'),
+        details: { customerName: orderData.customerName }
+      });
+    } catch (error: unknown) {
+      console.error('Error submitting order:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to submit order';
+      toast.error(errorMessage);
     }
   };
 

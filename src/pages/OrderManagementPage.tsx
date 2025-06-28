@@ -393,22 +393,36 @@ export default function OrderManagementPage() {
     }
   }, [setExpandedOrderIdWrapper]);
 
-  // Order action states
+  // Order action states - Keep only one set of state declarations
   const [processingOrder, setProcessingOrder] = useState<string | null>(null);
   const [deliveryStatus, setDeliveryStatus] = useState<Record<string, 'idle' | 'loading' | 'success' | 'error'>>({});
 
   useEffect(() => {
-    fetchOrders();
-    fetchCustomers();
-    fetchProducts();
+    const initializeData = async () => {
+      try {
+        setIsLoading(true);
+        await Promise.all([
+          fetchOrders(),
+          fetchCustomers(),
+          fetchProducts()
+        ]);
+      } catch (error) {
+        console.error('Error initializing data:', error);
+        toast.error('Failed to initialize data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initializeData();
   }, []);
 
   useEffect(() => {
     if (isModalOpen) {
+      // Refresh customers and products when modal opens
       fetchCustomers();
       fetchProducts();
     }
-    // eslint-disable-next-line
   }, [isModalOpen]);
 
   const fetchOrders = async () => {

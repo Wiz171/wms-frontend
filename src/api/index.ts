@@ -163,11 +163,11 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
         }
         throw new ApiError('Session expired. Please login again.', response.status, responseData, processedUrl);
       }
-      throw new ApiError(data?.message || data?.error || 'API request failed', res.status, data, processedUrl);
+      throw new ApiError(responseData?.message || responseData?.error || 'API request failed', response.status, responseData, processedUrl);
     }
 
-    if (data.status === 'error') {
-      throw new ApiError(data.message || 'API request failed', res.status, data, processedUrl);
+    if (responseData.status === 'error') {
+      throw new ApiError(responseData.message || 'API request failed', response.status, responseData, processedUrl);
     }
 
     // For login/register endpoints, return the entire response

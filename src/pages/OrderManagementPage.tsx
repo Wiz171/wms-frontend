@@ -393,7 +393,7 @@ export default function OrderManagementPage() {
     }
   }, [setExpandedOrderIdWrapper]);
 
-  // Order action states - Keep only one set of state declarations
+  // Order action states
   const [processingOrder, setProcessingOrder] = useState<string | null>(null);
   const [deliveryStatus, setDeliveryStatus] = useState<Record<string, 'idle' | 'loading' | 'success' | 'error'>>({});
 
@@ -575,23 +575,7 @@ export default function OrderManagementPage() {
     }
   }, [fetchOrders]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'accepted':
-        return 'bg-blue-100 text-blue-800';
-      case 'processing':
-        return 'bg-purple-100 text-purple-800';
-      case 'completed':
-        return 'bg-green-100 text-green-800';
-      case 'cancelled':
-      case 'rejected':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
+  // Status color mapping is already defined above in the component
 
   if (isLoading) {
     return (

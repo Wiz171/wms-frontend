@@ -1,10 +1,12 @@
 [build]
-  command = "npm run build"
+  command = "npm run build:full"
   publish = "dist"
-
+  
 [build.environment]
   NODE_VERSION = "20"
   NPM_VERSION = "10.0.0"
+  CI = "false"
+  NODE_OPTIONS = "--max_old_space_size=4096"
 
 [[redirects]]
   from = "/*"

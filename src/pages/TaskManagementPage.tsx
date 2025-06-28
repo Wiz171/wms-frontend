@@ -1,69 +1,84 @@
 import { useState, useEffect } from 'react';
 import { apiRequest } from '../api';
 import toast from 'react-hot-toast';
-
-interface Task {
-  id: string;
-  title: string;
-  description: string;
-  status: 'pending' | 'in-progress' | 'completed';
-  assignedTo: string;
-  dueDate: string;
-  priority: 'low' | 'medium' | 'high';
-  orderId?: string; // Add this to link a task to an order
-}
+import { TaskForm } from '../components/TaskForm';
+import type { TaskFormValues } from '../components/TaskForm';
+import { TaskTable } from '../components/TaskTable';
+import type { Task } from '../components/TaskTable';
 
 export default function TaskManagementPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [selectedOrder, setSelectedOrder] = useState<string>('');
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'in-progress' | 'completed'>('all');
-  const [sortBy, setSortBy] = useState<'dueDate' | 'priority'>('dueDate');
 
   useEffect(() => {
-    fetchTasks();
+    fetchOrders();
   }, []);
 
-  const fetchTasks = async () => {
+  useEffect(() => {
+    if (selectedOrder) fetchTasks(selectedOrder);
+  }, [selectedOrder]);
+
+  const fetchOrders = async () => {
     try {
-      const data = await apiRequest('/api/tasks');
-      // Ensure data is an array and map _id to id, include orderId
+      const data = await apiRequest('/api/orders');
       if (Array.isArray(data)) {
-        const mappedTasks = data.map((task: any) => ({ ...task, id: task._id, orderId: task.order }));
-        setTasks(mappedTasks);
+        setOrders(data);
+        if (data.length > 0) setSelectedOrder(data[0]._id);
+      } else {
+        setOrders([]);
+      }
+    } catch {
+      toast.error('Failed to fetch orders');
+    }
+  };
+
+  const fetchTasks = async (orderId: string) => {
+    setLoading(true);
+    try {
+      const data = await apiRequest(`/api/orders/${orderId}/tasks`);
+      if (Array.isArray(data)) {
+        setTasks(data);
       } else {
         setTasks([]);
       }
-    } catch (error) {
+    } catch {
+      setTasks([]);
       toast.error('Failed to fetch tasks');
     } finally {
       setLoading(false);
     }
   };
 
-  const updateTaskStatus = async (taskId: string, newStatus: Task['status']) => {
+  const handleCreateTask = async (values: TaskFormValues) => {
     try {
-      await apiRequest(`/api/tasks/${taskId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: newStatus }),
+      const newTask = await apiRequest('/api/tasks', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...values,
+          orderId: values.orderId,
+        }),
       });
-      setTasks(tasks.map(task => 
-        task.id === taskId ? { ...task, status: newStatus } : task
-      ));
-      toast.success('Task status updated');
-    } catch (error) {
-      toast.error('Failed to update task status');
+      setTasks((prev) => Array.isArray(prev) && newTask && typeof newTask === 'object' ? [...prev, newTask as Task] : prev);
+      toast.success('Task created');
+    } catch {
+      toast.error('Failed to create task');
     }
   };
 
-  const filteredTasks = tasks
-    .filter(task => filter === 'all' || task.status === filter)
-    .sort((a, b) => {
-      if (sortBy === 'dueDate') {
-        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-      }
-      const priorityOrder = { high: 0, medium: 1, low: 2 };
-      return priorityOrder[a.priority] - priorityOrder[b.priority];
-    });
+  const handleStatusChange = async (taskId: string, newStatus: string) => {
+    try {
+      await apiRequest(`/api/tasks/${taskId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ status: newStatus }),
+      });
+      setTasks((prev) => prev.map((t) => (t._id === taskId ? { ...t, status: newStatus } : t)));
+      toast.success('Task status updated');
+    } catch {
+      toast.error('Failed to update status');
+    }
+  };
 
   if (loading) {
     return (
@@ -75,77 +90,24 @@ export default function TaskManagementPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-        <div className="flex gap-2">
+      <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div>
+          <label className="font-medium mr-2">Order:</label>
           <select
-            value={filter}
-            onChange={(e) => setFilter(e.target.value as typeof filter)}
-            className="input-field max-w-xs"
+            value={selectedOrder}
+            onChange={(e) => setSelectedOrder(e.target.value)}
+            className="input-field"
           >
-            <option value="all">All Tasks</option>
-            <option value="pending">Pending</option>
-            <option value="in-progress">In Progress</option>
-            <option value="completed">Completed</option>
-          </select>
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-            className="input-field max-w-xs"
-          >
-            <option value="dueDate">Sort by Due Date</option>
-            <option value="priority">Sort by Priority</option>
+            {orders.map((order) => (
+              <option key={order._id} value={order._id}>
+                {order.name || order.orderNumber || `Order #${order._id.substring(order._id.length - 6)}`}
+              </option>
+            ))}
           </select>
         </div>
       </div>
-
-      <div className="grid gap-6">
-        {filteredTasks.map((task) => (
-          <div
-            key={task.id}
-            className="card hover:shadow-md transition-shadow duration-200"
-          >
-            <div className="flex flex-col sm:flex-row justify-between gap-4">
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-900">{task.title}</h3>
-                <p className="mt-1 text-sm text-gray-600">{task.description}</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
-                    {task.priority}
-                  </span>
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                    Due: {new Date(task.dueDate).toLocaleDateString()}
-                  </span>
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                    Assigned to: {task.assignedTo}
-                  </span>
-                  {task.orderId && (
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                      Order: {task.orderId}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <select
-                  value={task.status}
-                  onChange={(e) => updateTaskStatus(task.id, e.target.value as Task['status'])}
-                  className="input-field max-w-xs"
-                >
-                  <option value="pending">Pending</option>
-                  <option value="in-progress">In Progress</option>
-                  <option value="completed">Completed</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {filteredTasks.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-gray-500">No tasks found</p>
-        </div>
-      )}
+      <TaskForm orders={orders} onSubmit={handleCreateTask} />
+      <TaskTable tasks={tasks} onStatusChange={handleStatusChange} />
     </div>
   );
 }

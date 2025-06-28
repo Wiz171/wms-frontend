@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../api';
 import toast from 'react-hot-toast';
 import {
@@ -32,6 +32,7 @@ interface OrderFormData {
   customerId: string;
   items: OrderItem[];
   expectedDeliveryDate?: string;
+  assignedTo?: string;
 }
 
 interface CustomerOption {
@@ -43,6 +44,12 @@ interface ProductOption {
   id: string;
   name: string;
   price: number;
+}
+
+interface UserOption {
+  _id: string;
+  name?: string;
+  email: string;
 }
 
 export default function OrderManagementPage() {
@@ -58,20 +65,13 @@ export default function OrderManagementPage() {
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [viewOrder, setViewOrder] = useState<Order | null>(null);
+  const [users, setUsers] = useState<UserOption[]>([]);
 
   useEffect(() => {
     fetchOrders();
     fetchCustomers();
     fetchProducts();
   }, []);
-
-  useEffect(() => {
-    if (isModalOpen) {
-      fetchCustomers();
-      fetchProducts();
-    }
-    // eslint-disable-next-line
-  }, [isModalOpen]);
 
   const fetchOrders = async () => {
     try {
@@ -347,67 +347,109 @@ export default function OrderManagementPage() {
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">
                     <div className="space-y-1">
-                      {order.items && order.items.length > 0 ? (
-                        order.items.map((item, idx) => {
-                          // Handle both populated and unpopulated productId
-                          let productName = '--';
-                          if (item && item.productId) {
-                            if (typeof item.productId === 'object' && item.productId !== null && 'name' in item.productId) {
-                              productName = item.productId.name;
-                            } else if (item.productName) {
-                              productName = item.productName;
-                            } else {
-                              productName = getProductName(item.productId);
+                      {order.items && order.items.length > 0
+                        ? order.items.map((item, idx) => {
+                            // Handle both populated and unpopulated productId
+                            let productName = '--';
+                            if (item && item.productId) {
+                              if (typeof item.productId === 'object' && item.productId !== null && 'name' in item.productId) {
+                                productName = item.productId.name;
+                              } else if (item.productName) {
+                                productName = item.productName;
+                              } else {
+                                productName = getProductName(item.productId);
+                              }
                             }
-                          }
-                          return (
-                            <div key={typeof item.productId === 'object' && item.productId !== null ? String(item.productId._id) : String(item.productId) || String(idx)} className="flex items-center">
-                              <span>{productName}</span>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <span>--</span>
-                      )}
+                            return (
+                              <div key={typeof item.productId === 'object' && item.productId !== null ? String(item.productId._id) : String(item.productId) || String(idx)} className="flex items-center">
+                                <span>{productName}</span>
+                              </div>
+                            );
+                          })
+                        : <span>--</span>
+                      }
                     </div>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">
                     <div className="space-y-1">
-                      {order.items && order.items.length > 0 ? (
-                        order.items.map((item, idx) => (
-                          <div key={typeof item.productId === 'object' && item.productId !== null ? String(item.productId._id) : String(item.productId) || String(idx)}>
-                            {item.quantity}
-                          </div>
-                        ))
-                      ) : (
-                        <span>--</span>
-                      )}
+                      {order.items && order.items.length > 0
+                        ? order.items.map((item, idx) => (
+                            <div key={typeof item.productId === 'object' && item.productId !== null ? String(item.productId._id) : String(item.productId) || String(idx)}>
+                              {item.quantity}
+                            </div>
+                          ))
+                        : <span>--</span>
+                      }
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     ${typeof order.total === 'number' ? order.total.toFixed(2) : '0.00'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <select
-                      value={order.status}
-                      onChange={(e) => handleStatusChange(order.id, e.target.value as Order['status'])}
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="processing">Processing</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>{order.status.charAt(0).toUpperCase() + order.status.slice(1)}</span>
+                    {order.status === 'pending' && (
+                      <div className="flex flex-col sm:flex-row gap-2 mt-2">
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              await apiRequest(`/api/orders/${order.id}/approve`, { method: 'PATCH' });
+                              setOrders(orders.map(o => o.id === order.id ? { ...o, status: 'completed' } : o));
+                              toast.success('Order approved');
+                            } catch (error) {
+                              toast.error('Failed to approve order');
+                            }
+                          }}
+                          className="inline-flex items-center justify-center px-3 py-1 rounded bg-green-500 text-white text-xs font-semibold shadow hover:bg-green-600 transition"
+                          style={{ minWidth: 90 }}
+                        >
+                          <span className="material-icons mr-1" style={{ fontSize: 16 }}></span> Approve
+                        </button>
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              await apiRequest(`/api/orders/${order.id}/cancel`, { method: 'PATCH' });
+                              setOrders(orders.map(o => o.id === order.id ? { ...o, status: 'cancelled' } : o));
+                              toast.success('Order cancelled');
+                            } catch (error) {
+                              toast.error('Failed to cancel order');
+                            }
+                          }}
+                          className="inline-flex items-center justify-center px-3 py-1 rounded bg-red-500 text-white text-xs font-semibold shadow hover:bg-red-600 transition"
+                          style={{ minWidth: 90 }}
+                        >
+                          <span className="material-icons mr-1" style={{ fontSize: 16 }}></span> Cancel
+                        </button>
+                      </div>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {order.createdAt && dayjs(order.createdAt).isValid() ? dayjs(order.createdAt).format('YYYY-MM-DD') : '--'}
+                    {order.createdAt ? dayjs(order.createdAt).format('YYYY-MM-DD') : '--'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                  <td className="px-6 py-4 whitespace-nowrap">
                     <button
-                      onClick={() => handleViewOrder(order)}
-                      className="text-primary-600 hover:text-primary-900"
+                      className="btn-secondary btn-xs"
+                      onClick={(e) => { e.stopPropagation(); handleViewOrder(order); }}
+                      tabIndex={0}
                     >
-                      View Details
+                      View
+                    </button>
+                    <button
+                      className="btn-primary btn-xs ml-2"
+                      onClick={(e) => { e.stopPropagation(); handleEdit(order); }}
+                      tabIndex={0}
+                      style={{ zIndex: 10, position: 'relative' }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="btn-danger btn-xs ml-2"
+                      onClick={(e) => { e.stopPropagation(); handleDelete(order.id); }}
+                      tabIndex={0}
+                      style={{ zIndex: 10, position: 'relative' }}
+                    >
+                      <TrashIcon className="h-4 w-4" />
                     </button>
                   </td>
                 </tr>
@@ -417,115 +459,105 @@ export default function OrderManagementPage() {
         </div>
       </div>
 
-      {filteredOrders.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-gray-500">No orders found</p>
-        </div>
-      )}
-
-      {/* Modal */}
+      {/* Modal for Create/Edit Order */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full p-6">
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full p-6 overflow-y-auto" style={{ maxHeight: '90vh' }}>
             <h2 className="text-lg font-medium text-gray-900 mb-4">
               {editingOrder ? 'Edit Order' : 'Create Order'}
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label htmlFor="customer-select" className="block text-sm font-medium text-gray-700">Customer</label>
+                <label className="block text-sm font-medium text-gray-700">Customer</label>
                 <select
-                  id="customer-select"
                   value={formData.customerId}
-                  onChange={(e) => setFormData({ ...formData, customerId: e.target.value })}
+                  onChange={e => setFormData({ ...formData, customerId: e.target.value })}
                   className="input-field mt-1"
                   required
                 >
                   <option value="">Select a customer</option>
-                  {customers.map((customer) => (
+                  {customers.map(customer => (
                     <option key={customer.id} value={customer.id}>{customer.name}</option>
                   ))}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Items</label>
-                <div className="space-y-2">
-                  {formData.items.map((item, index) => (
-                    <div key={item.productId ? item.productId + '-' + index : index} className="flex gap-2">
-                      <label htmlFor={`product-select-${index}`} className="sr-only">Product</label>
-                      <select
-                        id={`product-select-${index}`}
-                        value={typeof item.productId === 'object' && item.productId !== null ? item.productId._id : item.productId}
-                        onChange={(e) => {
-                          const selectedProduct = products.find(p => p.id === e.target.value);
-                          const newItems = [...formData.items];
-                          newItems[index] = {
-                            ...newItems[index],
-                            productId: e.target.value,
-                            productName: selectedProduct ? selectedProduct.name : '',
-                            price: selectedProduct ? selectedProduct.price : 0,
-                          };
-                          setFormData({ ...formData, items: newItems });
-                        }}
-                        className="input-field flex-1"
-                        required
-                      >
-                        <option value="">Select a product</option>
-                        {products.map((product) => (
-                          <option key={product.id} value={product.id}>{product.name}</option>
-                        ))}
-                      </select>
-                      <label htmlFor={`quantity-input-${index}`} className="sr-only">Quantity</label>
-                      <input
-                        id={`quantity-input-${index}`}
-                        type="number"
-                        value={item.quantity}
-                        onChange={(e) => {
-                          const newItems = [...formData.items];
-                          newItems[index] = {
-                            ...newItems[index],
-                            quantity: parseInt(e.target.value),
-                          };
-                          setFormData({ ...formData, items: newItems });
-                        }}
-                        className="input-field w-24"
-                        min="1"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newItems = formData.items.filter((_, i) => i !== index);
-                          setFormData({ ...formData, items: newItems });
-                        }}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        <TrashIcon className="h-5 w-5" />
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFormData({
-                        ...formData,
-                        items: [...formData.items, { productId: '', productName: '', quantity: 1, price: 0 }],
-                      });
-                    }}
-                    className="text-primary-600 hover:text-primary-900 text-sm"
-                  >
-                    + Add Item
-                  </button>
-                </div>
+                {formData.items.map((item, idx) => (
+                  <div key={idx} className="flex gap-2 mb-2">
+                    <select
+                      value={typeof item.productId === 'object' && item.productId !== null ? item.productId._id : item.productId}
+                      onChange={e => {
+                        const newItems = [...formData.items];
+                        newItems[idx].productId = e.target.value;
+                        setFormData({ ...formData, items: newItems });
+                      }}
+                      className="input-field"
+                      required
+                    >
+                      <option value="">Select product</option>
+                      {products.map(product => (
+                        <option key={product.id} value={product.id}>{product.name}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min={1}
+                      value={item.quantity}
+                      onChange={e => {
+                        const newItems = [...formData.items];
+                        newItems[idx].quantity = parseInt(e.target.value) || 1;
+                        setFormData({ ...formData, items: newItems });
+                      }}
+                      className="input-field"
+                      placeholder="Qty"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newItems = formData.items.filter((_, i) => i !== idx);
+                        setFormData({ ...formData, items: newItems });
+                      }}
+                      className="ml-2 px-2 py-1 text-xs text-red-600 border border-red-300 rounded"
+                      disabled={formData.items.length === 1}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, items: [...formData.items, { productId: '', quantity: 1, price: 0 }] })}
+                  className="mt-2 px-3 py-1 text-xs text-blue-600 border border-blue-300 rounded"
+                >
+                  Add Item
+                </button>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Expected Delivery Date</label>
                 <input
                   type="date"
-                  value={formData.expectedDeliveryDate ? formData.expectedDeliveryDate.substring(0, 10) : ''}
+                  value={formData.expectedDeliveryDate || ''}
                   onChange={e => setFormData({ ...formData, expectedDeliveryDate: e.target.value })}
                   className="input-field mt-1"
-                  required
                 />
+              </div>
+              {/* Assigned To Dropdown */}
+              <div>
+                <label htmlFor="assignedTo" className="block text-sm font-medium text-gray-700">Assigned To</label>
+                <select
+                  id="assignedTo"
+                  value={formData.assignedTo}
+                  onChange={e => setFormData({ ...formData, assignedTo: e.target.value })}
+                  onFocus={handleUserDropdownFocus}
+                  className="input-field mt-1"
+                >
+                  <option value="">Select user</option>
+                  {users.map(user => (
+                    <option key={user._id} value={user._id}>{user.name || user.email}</option>
+                  ))}
+                </select>
               </div>
               <div className="flex justify-end gap-4 mt-6">
                 <button
@@ -539,7 +571,7 @@ export default function OrderManagementPage() {
                   type="submit"
                   className="btn-primary"
                 >
-                  {editingOrder ? 'Update' : 'Create'}
+                  {editingOrder ? 'Update Order' : 'Create Order'}
                 </button>
               </div>
             </form>
@@ -547,71 +579,41 @@ export default function OrderManagementPage() {
         </div>
       )}
 
-      {/* View Order Modal */}
+      {/* Modal for View Order Details */}
       {viewOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-          <div className="relative bg-white rounded-2xl shadow-xl max-w-lg w-full p-8 animate-fade-in">
-            <button
-              onClick={() => setViewOrder(null)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 focus:outline-none"
-              aria-label="Close"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-            <h2 className="text-2xl font-bold text-primary-700 mb-6 text-center tracking-tight">Order Details</h2>
-            <div className="space-y-4">
-              <div className="flex justify-between text-gray-600">
-                <span className="font-semibold">Order ID:</span>
-                <span className="font-mono">#{String(viewOrder.id).slice(-6)}</span>
-              </div>
-              <div className="flex justify-between text-gray-600">
-                <span className="font-semibold">Customer:</span>
-                <span>{viewOrder.customerName}</span>
-              </div>
-              <div>
-                <span className="font-semibold text-gray-600">Items:</span>
-                <ul className="mt-2 divide-y divide-gray-100 rounded-lg border border-gray-100 bg-gray-50">
-                  {viewOrder.items.map((item, idx) => (
-                    <li key={idx} className="flex justify-between items-center px-4 py-2">
-                      <span className="font-medium text-gray-800">{typeof item.productId === 'object' && item.productId !== null ? item.productId.name : item.productName || '--'}</span>
-                      <span className="text-xs text-gray-500">x{item.quantity}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="flex justify-between text-gray-600">
-                <span className="font-semibold">Total:</span>
-                <span className="font-bold text-lg text-primary-700">${viewOrder.total.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-gray-600">
-                <span className="font-semibold">Status:</span>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">{viewOrder.status}</span>
-              </div>
-              <div className="flex justify-between text-gray-600">
-                <span className="font-semibold">Date:</span>
-                <span>{viewOrder.createdAt ? viewOrder.createdAt.substring(0, 10) : '--'}</span>
-              </div>
-              {viewOrder.expectedDeliveryDate && (
-                <div className="flex justify-between text-gray-600">
-                  <span className="font-semibold">Expected Delivery:</span>
-                  <span>{viewOrder.expectedDeliveryDate.substring(0, 10)}</span>
-                </div>
-              )}
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full p-6 overflow-y-auto" style={{ maxHeight: '90vh' }}>
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Order Details</h2>
+            <div className="mb-4">
+              <strong>Order ID:</strong> #{String(viewOrder.id).slice(-6)}<br />
+              <strong>Customer:</strong> {viewOrder.customerName || getCustomerName(viewOrder.customerId)}<br />
+              <strong>Status:</strong> <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(viewOrder.status)}`}>{viewOrder.status.charAt(0).toUpperCase() + viewOrder.status.slice(1)}</span><br />
+              <strong>Date:</strong> {viewOrder.createdAt ? dayjs(viewOrder.createdAt).format('YYYY-MM-DD') : '--'}<br />
+              <strong>Expected Delivery:</strong> {viewOrder.expectedDeliveryDate || '--'}
             </div>
-            <div className="flex justify-end gap-3 mt-8">
+            <div className="mb-4">
+              <strong>Items:</strong>
+              <ul className="list-disc ml-6">
+                {viewOrder.items.map((item, idx) => (
+                  <li key={idx}>
+                    {typeof item.productId === 'object' && item.productId !== null && 'name' in item.productId
+                      ? item.productId.name
+                      : item.productName || getProductName(item.productId as string)}
+                    {' '}x {item.quantity} @ ${item.price.toFixed(2)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="mb-4">
+              <strong>Total:</strong> ${typeof viewOrder.total === 'number' ? viewOrder.total.toFixed(2) : '0.00'}
+            </div>
+            <div className="flex justify-end">
               <button
-                onClick={() => { setViewOrder(null); handleEdit(viewOrder); }}
-                className="px-4 py-2 rounded-lg bg-primary-50 text-primary-700 font-semibold hover:bg-primary-100 transition"
+                type="button"
+                onClick={() => setViewOrder(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-500 border border-gray-300 rounded"
               >
-                Edit
-              </button>
-              <button
-                onClick={async () => { await handleDelete(viewOrder.id); setViewOrder(null); }}
-                className="px-4 py-2 rounded-lg bg-red-50 text-red-700 font-semibold hover:bg-red-100 transition"
-              >
-                Delete
+                Close
               </button>
             </div>
           </div>

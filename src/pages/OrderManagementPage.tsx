@@ -329,7 +329,23 @@ export default function OrderManagementPage() {
     }
   };
 
-  // handleAcceptOrder and handleRejectOrder functions are defined earlier in the file
+  const handleRejectOrder = async (orderId: string) => {
+    try {
+      setProcessingOrderId(orderId);
+      await apiRequest(`/api/orders/${orderId}/reject`, { method: 'POST' });
+      
+      setOrders(prevOrders => 
+        prevOrders.map(order => 
+          order.id === orderId ? { ...order, status: 'rejected' } : order
+        )
+      );
+      
+      toast.success('Order rejected successfully');
+      await logAction({
+        action: 'order_rejected',
+        entity: 'order',
+        entityId: orderId,
+        details: { status: 'rejected' }
       });
     } catch (error: unknown) {
       console.error('Error rejecting order:', error);

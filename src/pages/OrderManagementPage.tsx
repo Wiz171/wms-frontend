@@ -378,11 +378,13 @@ export default function OrderManagementPage() {
     try {
       setIsLoading(true);
       
-      const data = await apiRequest('/api/orders');
+      const response = await apiRequest<{ data?: any[] }>('/api/orders');
+      const ordersData = response.data || response;
       
-      console.log('Fetched orders:', data);
-      if (Array.isArray(data)) {
-        const mappedOrders = data.map((order: any) => ({
+      console.log('Fetched orders response:', response);
+      
+      if (Array.isArray(ordersData)) {
+        const mappedOrders = ordersData.map((order: any) => ({
           ...order,
           id: order._id || order.id,
           // Ensure customerName is set, falling back to customer.name or empty string
@@ -393,16 +395,31 @@ export default function OrderManagementPage() {
         console.log('Mapped orders:', mappedOrders);
         setOrders(mappedOrders);
       } else {
+        console.warn('Unexpected orders data format:', ordersData);
         setOrders([]);
       }
     } catch (error) {
       console.error('Error fetching orders:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch orders';
-      toast.error(errorMessage);
       
-      // Redirect to login if unauthorized
-      if (error instanceof Error && error.message.includes('401') || error.message.includes('403')) {
-        window.location.href = '/login';
+      // Handle different types of errors
+      if (error instanceof Error) {
+        const errorMessage = error.message || 'Failed to fetch orders';
+        
+        // Check for authentication errors
+        if (error.message.includes('401') || error.message.includes('403')) {
+          console.log('Authentication error detected, redirecting to login...');
+          // Clear any invalid token
+          localStorage.removeItem('token');
+          // Redirect to login with a message
+          const redirectUrl = window.location.pathname + window.location.search;
+          window.location.href = `/login?redirect=${encodeURIComponent(redirectUrl)}&message=session_expired`;
+          return; // Prevent further execution
+        }
+        
+        // Show user-friendly error message
+        toast.error(errorMessage);
+      } else {
+        toast.error('An unexpected error occurred');
       }
     } finally {
       setIsLoading(false);

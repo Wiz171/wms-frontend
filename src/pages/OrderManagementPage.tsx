@@ -67,6 +67,24 @@ export default function OrderManagementPage() {
   const [viewOrder, setViewOrder] = useState<Order | null>(null);
   const [users, setUsers] = useState<UserOption[]>([]);
 
+  // Fetch users when the "Assigned To" dropdown is focused
+  const handleUserDropdownFocus = async () => {
+    if (users.length === 0) {
+      try {
+        const data = await apiRequest('/api/users');
+        if (Array.isArray(data)) {
+          setUsers(data.map((u: any) => ({
+            _id: u._id || u.id,
+            name: u.name,
+            email: u.email,
+          })));
+        }
+      } catch (error) {
+        toast.error('Failed to fetch users');
+      }
+    }
+  };
+
   useEffect(() => {
     fetchOrders();
     fetchCustomers();
@@ -222,20 +240,6 @@ export default function OrderManagementPage() {
 
   const handleViewOrder = (order: Order) => setViewOrder(order);
 
-  const handleStatusChange = async (orderId: string, newStatus: Order['status']) => {
-    try {
-      await apiRequest(`/api/orders/${orderId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: newStatus }),
-      });
-      setOrders(orders.map(order => 
-        order.id === orderId ? { ...order, status: newStatus } : order
-      ));
-      toast.success('Order status updated');
-    } catch (error) {
-      toast.error('Failed to update order status');
-    }
-  };
 
   const filteredOrders = orders.filter(order =>
     (order.customerName && order.customerName.toLowerCase().includes(searchQuery.toLowerCase())) ||

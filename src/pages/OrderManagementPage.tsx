@@ -216,19 +216,34 @@ export default function OrderManagementPage() {
 
     try {
       setProcessingOrderId(orderId);
-      await apiRequest(`/api/orders/${orderId}`, { method: 'DELETE' });
       
+      // First update the order status to rejected
+      await apiRequest(`/api/orders/${orderId}/reject`, { method: 'POST' });
+      
+      // Update the UI to show the order as rejected
       setOrders(prevOrders => 
-        prevOrders.filter(order => order.id !== orderId)
+        prevOrders.map(order => 
+          order.id === orderId 
+            ? { ...order, status: 'rejected' as const }
+            : order
+        )
       );
       
       toast.success('Order rejected successfully');
+      
+      // Log the action
       await logAction({
         action: 'order_rejected',
         entity: 'order',
         entityId: orderId,
         details: { status: 'rejected' }
       });
+      
+      // Remove the order from the list after a short delay
+      setTimeout(() => {
+        setOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+      }, 1000);
+      
     } catch (error: unknown) {
       console.error('Error rejecting order:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to reject order';
@@ -238,45 +253,7 @@ export default function OrderManagementPage() {
     }
   };
 
-  const handleSwitchToDO = async (orderId: string): Promise<void> => {
-    try {
-      setProcessingOrderId(orderId);
-      const response = await apiRequest<{deliveryOrder: DeliveryOrder}>(
-        `/api/orders/${orderId}/switch-to-do`,
-        { method: 'POST' }
-      );
-      
-      if (response?.deliveryOrder) {
-        setOrders(prevOrders => 
-          prevOrders.map(order => 
-            order.id === orderId 
-              ? { 
-                  ...order, 
-                  status: 'processing' as const,
-                  deliveryOrder: response.deliveryOrder 
-                } 
-              : order
-          )
-        );
-        
-        toast.success('Order converted to delivery order');
-        setExpandedOrderIdWrapper(orderId);
-        
-        await logAction({
-          action: 'order_converted_to_do',
-          entity: 'order',
-          entityId: orderId,
-          details: { doNumber: response.deliveryOrder?.doNumber }
-        });
-      }
-    } catch (error: unknown) {
-      console.error('Error converting to delivery order:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to convert to delivery order';
-      toast.error(errorMessage);
-    } finally {
-      setProcessingOrderId(null);
-    }
-  };
+  // handleSwitchToDO is defined below with useCallback
 
   const handleUpdateDeliveryStatus = async (deliveryOrderId: string, status: 'delivered' | 'pending') => {
     try {
@@ -328,34 +305,7 @@ export default function OrderManagementPage() {
     }
   };
 
-  const handleRejectOrder = async (orderId: string) => {
-    try {
-      setProcessingOrderId(orderId);
-      await apiRequest(`/api/orders/${orderId}/reject`, { method: 'POST' });
-      
-      setOrders(prevOrders => 
-        prevOrders.map(order => 
-          order.id === orderId ? { ...order, status: 'rejected' } : order
-        )
-      );
-      
-      toast.success('Order rejected successfully');
-      await logAction({
-        action: 'order_rejected',
-        entity: 'order',
-        entityId: orderId,
-        details: { status: 'rejected' }
-      });
-    } catch (error: unknown) {
-      console.error('Error rejecting order:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to reject order';
-      toast.error(errorMessage);
-    } finally {
-      setProcessingOrderId(null);
-    }
-  };
-
-  const handleSwitchToDO = React.useCallback(async (orderId: string) => {
+  const handleSwitchToDO = React.useCallback(async (orderId: string): Promise<void> => {
     try {
       setProcessingOrderId(orderId);
       const response = await apiRequest<{deliveryOrder: DeliveryOrder}>(
@@ -395,7 +345,6 @@ export default function OrderManagementPage() {
 
   // Order action states
   const [processingOrder, setProcessingOrder] = useState<string | null>(null);
-  const [deliveryStatus, setDeliveryStatus] = useState<Record<string, 'idle' | 'loading' | 'success' | 'error'>>({});
 
   useEffect(() => {
     const initializeData = async () => {

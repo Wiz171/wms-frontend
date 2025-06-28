@@ -1,13 +1,37 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { apiRequest } from '../api';
 import toast from 'react-hot-toast';
-import {
-  TrashIcon,
-  PlusIcon,
-  MagnifyingGlassIcon,
-} from '@heroicons/react/24/outline';
-import dayjs from 'dayjs';
 import { logAction } from '../utils/log';
+
+type OrderStatus = 'pending' | 'accepted' | 'rejected' | 'processing' | 'completed' | 'cancelled';
+type DeliveryStatus = 'pending' | 'delivered';
+
+interface OrderItemDetail {
+  id: string;
+  product: {
+    _id: string;
+    name: string;
+  };
+  quantity: number;
+  price: number;
+}
+
+interface DeliveryOrder {
+  id: string;
+  doNumber: string;
+  poNumber: string;
+  items: OrderItemDetail[];
+  totalAmount: number;
+  customerName: string;
+  deliveryDate: string;
+  status: 'pending' | 'delivered';
+  transportInfo: {
+    transporter: string;
+    vehicleNumber: string;
+    driverName: string;
+    contactNumber: string;
+  };
+}
 
 interface Order {
   id: string;
@@ -15,10 +39,11 @@ interface Order {
   customerName: string;
   items: OrderItem[];
   total: number;
-  status: 'pending' | 'processing' | 'completed' | 'cancelled';
+  status: 'pending' | 'accepted' | 'rejected' | 'processing' | 'completed' | 'cancelled';
   createdAt: string;
   updatedAt: string;
   expectedDeliveryDate?: string;
+  deliveryOrder?: DeliveryOrder;
 }
 
 interface OrderItem {
@@ -47,18 +72,315 @@ interface ProductOption {
 }
 
 export default function OrderManagementPage() {
+  // State for orders and UI
   const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [processingOrderId, setProcessingOrderId] = useState<string | null>(null);
+  const [deliveryStatus, setDeliveryStatus] = useState<Record<string, 'idle' | 'loading' | 'success' | 'error'>>({});
+  
+  // Modal and form states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [formData, setFormData] = useState<OrderFormData>({
     customerId: '',
     items: [],
   });
+  const [viewOrder, setViewOrder] = useState<Order | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  
+  // API data states
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
-  const [viewOrder, setViewOrder] = useState<Order | null>(null);
+  const [processingOrder, setProcessingOrder] = useState<string | null>(null);
+  
+  // Wrapper functions for state setters to ensure consistent usage
+  const setExpandedOrderIdWrapper = React.useCallback((id: string | null) => setExpandedOrderId(id), []);
+  const setCustomersWrapper = React.useCallback((newCustomers: CustomerOption[]) => setCustomers(newCustomers), []);
+  const setProductsWrapper = React.useCallback((newProducts: ProductOption[]) => setProducts(newProducts), []);
+  
+  // Refs for stable access to state values in callbacks
+  const expandedOrderIdRef = React.useRef(expandedOrderId);
+  const customersRef = React.useRef(customers);
+  const productsRef = React.useRef(products);
+  
+  // Update refs when state changes
+  React.useEffect(() => {
+    expandedOrderIdRef.current = expandedOrderId;
+  }, [expandedOrderId]);
+  
+  React.useEffect(() => {
+    customersRef.current = customers;
+  }, [customers]);
+  
+  React.useEffect(() => {
+    productsRef.current = products;
+  }, [products]);
+  
+  // Memoized filtered orders based on search query
+  const filteredOrders = useMemo(() => {
+    if (!searchQuery.trim()) return orders;
+    
+    const query = searchQuery.toLowerCase();
+    return orders.filter(order => 
+      (order.id && order.id.toLowerCase().includes(query)) ||
+      (order.customerName && order.customerName.toLowerCase().includes(query)) ||
+      (order.status && order.status.toLowerCase().includes(query)) ||
+      (order.expectedDeliveryDate && order.expectedDeliveryDate.includes(query))
+    );
+  }, [orders, searchQuery]);
+
+  // Helper function to safely update order status
+  const updateOrderStatus = (orderId: string, updates: Partial<Order>) => {
+    setOrders(prevOrders => 
+      prevOrders.map(order => 
+        order.id === orderId ? { ...order, ...updates } : order
+      )
+    );
+  };
+  
+  // Get status color for UI
+  const getStatusColor = (status: string): string => {
+    switch (status) {
+      case 'pending': return 'bg-yellow-100 text-yellow-800';
+      case 'accepted': return 'bg-blue-100 text-blue-800';
+      case 'processing': return 'bg-purple-100 text-purple-800';
+      case 'completed': return 'bg-green-100 text-green-800';
+      case 'cancelled':
+      case 'rejected': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Fetch data on component mount
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        const [ordersData, customersData, productsData] = await Promise.all([
+          apiRequest<Order[]>('/api/orders'),
+          apiRequest<CustomerOption[]>('/api/customers'),
+          apiRequest<{products: any[]}>('/api/products')
+        ]);
+        
+        setOrders(ordersData);
+        setCustomersWrapper(customersData);
+        setProductsWrapper(productsData.products.map((p: any) => ({
+          id: p._id || p.id || '',
+          name: p.name,
+          price: p.price
+        })));
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        setError('Failed to load data');
+        toast.error('Failed to load data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const handleAcceptOrder = async (orderId: string) => {
+    try {
+      setProcessingOrderId(orderId);
+      await apiRequest(`/api/orders/${orderId}/accept`, { method: 'POST' });
+      
+      setOrders(prevOrders => 
+        prevOrders.map(order => 
+          order.id === orderId ? { ...order, status: 'accepted' } : order
+        )
+      );
+      
+      toast.success('Order accepted successfully');
+      await logAction({
+        action: 'order_accepted',
+        entity: 'order',
+        entityId: orderId,
+        details: { status: 'accepted' }
+      });
+    } catch (error: unknown) {
+      console.error('Error accepting order:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to accept order';
+      toast.error(errorMessage);
+    } finally {
+      setProcessingOrderId(null);
+    }
+  };
+
+  const handleRejectOrder = async (orderId: string) => {
+    if (!window.confirm('Are you sure you want to reject this order? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      setProcessingOrderId(orderId);
+      await apiRequest(`/api/orders/${orderId}`, { method: 'DELETE' });
+      
+      setOrders(prevOrders => 
+        prevOrders.filter(order => order.id !== orderId)
+      );
+      
+      toast.success('Order rejected successfully');
+      await logAction({
+        action: 'order_rejected',
+        entity: 'order',
+        entityId: orderId,
+        details: { status: 'rejected' }
+      });
+    } catch (error: unknown) {
+      console.error('Error rejecting order:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to reject order';
+      toast.error(errorMessage);
+    } finally {
+      setProcessingOrderId(null);
+    }
+  };
+
+  const handleSwitchToDO = async (orderId: string): Promise<void> => {
+    try {
+      setProcessingOrderId(orderId);
+      const response = await apiRequest<{deliveryOrder: DeliveryOrder}>(
+        `/api/orders/${orderId}/switch-to-do`,
+        { method: 'POST' }
+      );
+      
+      if (response?.deliveryOrder) {
+        setOrders(prevOrders => 
+          prevOrders.map(order => 
+            order.id === orderId 
+              ? { 
+                  ...order, 
+                  status: 'processing' as const,
+                  deliveryOrder: response.deliveryOrder 
+                } 
+              : order
+          )
+        );
+        
+        toast.success('Order converted to delivery order');
+        setExpandedOrderIdWrapper(orderId);
+        
+        await logAction({
+          action: 'order_converted_to_do',
+          entity: 'order',
+          entityId: orderId,
+          details: { doNumber: response.deliveryOrder?.doNumber }
+        });
+      }
+    } catch (error: unknown) {
+      console.error('Error converting to delivery order:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to convert to delivery order';
+      toast.error(errorMessage);
+    } finally {
+      setProcessingOrderId(null);
+    }
+  };
+
+  const handleUpdateDeliveryStatus = async (deliveryOrderId: string, status: 'delivered' | 'pending') => {
+    try {
+      setDeliveryStatus(prev => ({ ...prev, [deliveryOrderId]: 'loading' as const }));
+      
+      const response = await apiRequest<{deliveryOrder: DeliveryOrder}>(
+        `/api/orders/delivery/${deliveryOrderId}/status`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ status })
+        }
+      );
+
+      if (response?.deliveryOrder) {
+        setOrders(prevOrders => 
+          prevOrders.map(order => {
+            if (order.deliveryOrder?.id === deliveryOrderId) {
+              return {
+                ...order,
+                status: status === 'delivered' ? 'completed' : order.status,
+                deliveryOrder: {
+                  ...order.deliveryOrder,
+                  status
+                }
+              };
+            }
+            return order;
+          })
+        );
+        
+        toast.success(`Delivery order marked as ${status}`);
+        
+        await logAction({
+          action: `delivery_${status}`,
+          entity: 'delivery_order',
+          entityId: deliveryOrderId,
+          details: { status }
+        });
+      }
+    } catch (error: unknown) {
+      console.error('Error updating delivery status:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update delivery status';
+      toast.error(errorMessage);
+    } finally {
+      setDeliveryStatus(prev => ({
+        ...prev,
+        [deliveryOrderId]: 'idle' as const
+      }));
+    }
+  };
+
+  // handleAcceptOrder and handleRejectOrder functions are defined earlier in the file
+      });
+    } catch (error: unknown) {
+      console.error('Error rejecting order:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to reject order';
+      toast.error(errorMessage);
+    } finally {
+      setProcessingOrderId(null);
+    }
+  };
+
+  const handleSwitchToDO = React.useCallback(async (orderId: string) => {
+    try {
+      setProcessingOrderId(orderId);
+      const response = await apiRequest<{deliveryOrder: DeliveryOrder}>(
+        `/api/orders/${orderId}/switch-to-do`,
+        { method: 'POST' }
+      );
+      
+      setOrders(prevOrders => 
+        prevOrders.map(order => 
+          order.id === orderId 
+            ? { 
+                ...order, 
+                status: 'processing' as const,
+                deliveryOrder: response.deliveryOrder 
+              } 
+            : order
+        )
+      );
+      
+      toast.success('Order converted to delivery order');
+      setExpandedOrderIdWrapper(orderId);
+      
+      await logAction({
+        action: 'order_converted_to_do',
+        entity: 'order',
+        entityId: orderId,
+        details: { doNumber: response.deliveryOrder?.doNumber }
+      });
+    } catch (error: unknown) {
+      console.error('Error converting to delivery order:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to convert to delivery order';
+      toast.error(errorMessage);
+    } finally {
+      setProcessingOrderId(null);
+    }
+  }, [setExpandedOrderIdWrapper]);
+
+  // Order action states
+  const [processingOrder, setProcessingOrder] = useState<string | null>(null);
+  const [deliveryStatus, setDeliveryStatus] = useState<Record<string, 'idle' | 'loading' | 'success' | 'error'>>({});
 
   useEffect(() => {
     fetchOrders();
@@ -104,9 +426,13 @@ export default function OrderManagementPage() {
     try {
       const data = await apiRequest('/api/customers');
       if (Array.isArray(data)) {
-        setCustomers(data.map((c: any) => ({ id: c._id || c.id, name: c.name })));
+        const customerOptions: CustomerOption[] = data.map((c: { _id?: string; id?: string; name: string }) => ({
+          id: c._id || c.id || '',
+          name: c.name
+        }));
+        setCustomersWrapper(customerOptions);
       } else {
-        setCustomers([]);
+        setCustomersWrapper([]);
       }
     } catch (error) {
       toast.error('Failed to fetch customers');
@@ -115,13 +441,18 @@ export default function OrderManagementPage() {
 
   const fetchProducts = async () => {
     try {
-      const data = await apiRequest('/api/products');
-      if (Array.isArray(data)) {
-        setProducts(data.map((p: any) => ({ id: p._id || p.id, name: p.name, price: p.price })));
+      const data = await apiRequest<{ products: { _id?: string; id?: string; name: string; price: number }[] }>('/api/products');
+      if (Array.isArray(data.products)) {
+        const productOptions: ProductOption[] = data.products.map((p) => ({
+          id: p._id || p.id || '',
+          name: p.name,
+          price: p.price
+        }));
+        setProductsWrapper(productOptions);
       } else {
-        setProducts([]);
+        setProductsWrapper([]);
       }
-    } catch (error) {
+    } catch (error: unknown) {
       toast.error('Failed to fetch products');
     }
   };
@@ -133,30 +464,58 @@ export default function OrderManagementPage() {
       return;
     }
 
-    // Get customer name
-    const selectedCustomer = customers.find(c => c.id === formData.customerId);
-    if (!selectedCustomer) {
-      toast.error('Selected customer not found');
-      return;
+    try {
+      const selectedCustomer = customersRef.current.find((c: CustomerOption) => c.id === formData.customerId);
+      if (!selectedCustomer) {
+        toast.error('Selected customer not found');
+        return;
+      }
+
+      const orderData = {
+        customerId: formData.customerId,
+        customerName: selectedCustomer.name,
+        items: formData.items.map(item => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          price: productsRef.current.find(p => p.id === item.productId)?.price || 0
+        })),
+        total: formData.items.reduce((sum: number, item: OrderItem) => {
+          const product = productsRef.current.find((p: ProductOption) => p.id === item.productId);
+          return sum + (product ? product.price * item.quantity : 0);
+        }, 0),
+        status: 'pending' as const,
+        expectedDeliveryDate: formData.expectedDeliveryDate
+      };
+
+      if (editingOrder) {
+        await apiRequest(`/api/orders/${editingOrder.id}`, {
+          method: 'PUT',
+          data: orderData
+        });
+        toast.success('Order updated successfully');
+      } else {
+        await apiRequest('/api/orders', {
+          method: 'POST',
+          data: orderData
+        });
+        toast.success('Order created successfully');
+      }
+
+      setIsModalOpen(false);
+      setFormData({ customerId: '', items: [] });
+      fetchOrders();
+      
+      await logAction({
+        action: editingOrder ? 'order_updated' : 'order_created',
+        entity: 'order',
+        entityId: editingOrder?.id || 'new',
+        details: orderData
+      });
+    } catch (error: unknown) {
+      console.error('Error submitting order:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to submit order';
+      toast.error(errorMessage);
     }
-
-    // Calculate total
-    const total = formData.items.reduce((sum, item) => {
-      const product = products.find(p => p.id === item.productId);
-      return sum + (product ? product.price * item.quantity : 0);
-    }, 0);
-
-    const orderData = {
-      customerId: formData.customerId,
-      customerName: selectedCustomer.name,
-      items: formData.items.map(item => ({
-        productId: item.productId,
-        quantity: parseInt(String(item.quantity)),
-        price: products.find(p => p.id === item.productId)?.price || 0
-      })),
-      total: parseFloat(total.toFixed(2)),
-      status: 'pending',
-      expectedDeliveryDate: formData.expectedDeliveryDate
     };
 
     try {
@@ -200,7 +559,7 @@ export default function OrderManagementPage() {
     }
   };
 
-  const handleDelete = async (orderId: string) => {
+  const handleDelete = React.useCallback(async (orderId: string) => {
     if (!window.confirm('Are you sure you want to delete this order?')) return;
     try {
       await apiRequest(`/api/orders/${orderId}`, {
@@ -208,116 +567,39 @@ export default function OrderManagementPage() {
       });
       toast.success('Order deleted successfully');
       fetchOrders();
-    } catch (error) {
-      toast.error('Failed to delete order');
-    }
-  };
-
-  const handleEdit = async (order: Order) => {
-    console.log('Editing order:', order);
-    setEditingOrder(order);
-    
-    // Ensure we have the latest customers data
-    await fetchCustomers();
-    
-    // Get the customer name from the order or find it in the customers list
-    const customerName = order.customerName || 
-      customers.find(c => c.id === order.customerId)?.name || 
-      '';
-    
-    // Update form data with order details
-    const formDataUpdate: OrderFormData = {
-      customerId: order.customerId,
-      customerName: customerName,
-      items: order.items.map(item => ({
-        productId: typeof item.productId === 'object' && item.productId !== null && '_id' in item.productId
-          ? item.productId._id
-          : item.productId,
-        quantity: item.quantity,
-        price: item.price,
-        productName: typeof item.productId === 'object' && item.productId !== null && 'name' in item.productId
-          ? item.productId.name
-          : getProductName(item.productId as string)
-      })),
-      expectedDeliveryDate: order.expectedDeliveryDate
-        ? order.expectedDeliveryDate.substring(0, 10)
-        : '',
-    };
-    
-    console.log('Setting form data:', formDataUpdate);
-    setFormData(formDataUpdate);
-    
-    // If customer is not in the customers list, add it
-    const customerExists = customers.some(c => c.id === order.customerId);
-    console.log('Customer exists in list:', customerExists, 'Customer ID:', order.customerId);
-    
-    if (order.customerId && !customerExists) {
-      console.log('Adding customer to list:', { id: order.customerId, name: order.customerName });
-      setCustomers(prev => [
-        ...prev, 
-        { 
-          id: order.customerId, 
-          name: order.customerName || `Customer ${order.customerId.slice(-4)}` 
-        }
-      ]);
-    }
-    
-    // Force a re-render of the dropdown by toggling the modal
-    setIsModalOpen(false);
-    setTimeout(() => {
-      setIsModalOpen(true);
-    }, 50);
-  };
-
-  const handleViewOrder = (order: Order) => setViewOrder(order);
-
-  const handleStatusChange = async (orderId: string, newStatus: Order['status']) => {
-    try {
-      await apiRequest(`/api/orders/${orderId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: newStatus }),
+      
+      await logAction({
+        action: 'order_deleted',
+        entity: 'order',
+        entityId: orderId,
+        details: {}
       });
-      setOrders(orders.map(order => 
-        order.id === orderId ? { ...order, status: newStatus } : order
-      ));
-      toast.success('Order status updated');
-    } catch (error) {
-      toast.error('Failed to update order status');
+    } catch (error: unknown) {
+      console.error('Error deleting order:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete order';
+      toast.error(errorMessage);
     }
-  };
+  }, [fetchOrders]);
 
-  const filteredOrders = orders.filter(order =>
-    (order.customerName && order.customerName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (order.id && String(order.id).toLowerCase().includes(searchQuery.toLowerCase()))
-  );
-
-  const getStatusColor = (status: Order['status']) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending':
         return 'bg-yellow-100 text-yellow-800';
-      case 'processing':
+      case 'accepted':
         return 'bg-blue-100 text-blue-800';
+      case 'processing':
+        return 'bg-purple-100 text-purple-800';
       case 'completed':
         return 'bg-green-100 text-green-800';
       case 'cancelled':
+      case 'rejected':
         return 'bg-red-100 text-red-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
   };
 
-  // Helper to get customer name by ID
-  const getCustomerName = (customerId: string) => {
-    const customer = customers.find(c => c.id === customerId);
-    return customer ? customer.name : '--';
-  };
-  // Helper to get product name by ID
-  const getProductName = (productId: string) => {
-    const product = products.find(p => p.id === productId);
-    return product ? product.name : '--';
-  };
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
@@ -387,79 +669,221 @@ export default function OrderManagementPage() {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredOrders.map((order) => (
-                <tr key={order.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    #{String(order.id).slice(-6)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {order.customerName || getCustomerName(order.customerId)}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    <div className="space-y-1">
-                      {order.items && order.items.length > 0 ? (
-                        order.items.map((item, idx) => {
-                          // Handle both populated and unpopulated productId
-                          let productName = '--';
-                          if (item && item.productId) {
-                            if (typeof item.productId === 'object' && item.productId !== null && 'name' in item.productId) {
-                              productName = item.productId.name;
-                            } else if (item.productName) {
-                              productName = item.productName;
-                            } else {
-                              productName = getProductName(item.productId);
+                <React.Fragment key={order.id}>
+                  <tr 
+                    className={`hover:bg-gray-50 cursor-pointer ${expandedOrderIdRef.current === order.id ? 'bg-blue-50' : ''}`}
+                    onClick={() => setExpandedOrderIdWrapper(expandedOrderIdRef.current === order.id ? null : order.id)}
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      #{String(order.id).slice(-6)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {order.customerName || getCustomerName(order.customerId)}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      <div className="space-y-1">
+                        {order.items && order.items.length > 0 ? (
+                          order.items.map((item, idx) => {
+                            let productName = '--';
+                            if (item && item.productId) {
+                              if (typeof item.productId === 'object' && item.productId !== null && 'name' in item.productId) {
+                                productName = item.productId.name;
+                              } else if (item.productName) {
+                                productName = item.productName;
+                              } else {
+                                productName = getProductName(item.productId);
+                              }
                             }
-                          }
-                          return (
-                            <div key={typeof item.productId === 'object' && item.productId !== null ? String(item.productId._id) : String(item.productId) || String(idx)} className="flex items-center">
-                              <span>{productName}</span>
+                            return (
+                              <div key={typeof item.productId === 'object' && item.productId !== null ? String(item.productId._id) : String(item.productId) || String(idx)} className="flex items-center">
+                                <span>{productName}</span>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <span>--</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      <div className="space-y-1">
+                        {order.items && order.items.length > 0 ? (
+                          order.items.map((item, idx) => (
+                            <div key={typeof item.productId === 'object' && item.productId !== null ? String(item.productId._id) : String(item.productId) || String(idx)}>
+                              {item.quantity}
                             </div>
-                          );
-                        })
+                          ))
+                        ) : (
+                          <span>--</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      ${typeof order.total === 'number' ? order.total.toFixed(2) : '0.00'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                        {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {order.expectedDeliveryDate && dayjs(order.expectedDeliveryDate).isValid() 
+                        ? dayjs(order.expectedDeliveryDate).format('MMM D, YYYY') 
+                        : '--'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                      {order.status === 'pending' ? (
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAcceptOrder(order.id);
+                            }}
+                            disabled={processingOrder === order.id}
+                            className="text-green-600 hover:text-green-800 disabled:opacity-50"
+                          >
+                            {processingOrder === order.id ? 'Accepting...' : 'Accept'}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRejectOrder(order.id);
+                            }}
+                            disabled={processingOrder === order.id}
+                            className="text-red-600 hover:text-red-800 ml-2 disabled:opacity-50"
+                          >
+                            Reject
+                          </button>
+                        </>
+                      ) : order.status === 'accepted' ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSwitchToDO(order.id);
+                          }}
+                          disabled={processingOrder === order.id}
+                          className="text-blue-600 hover:text-blue-800 disabled:opacity-50"
+                        >
+                          {processingOrder === order.id ? 'Processing...' : 'Switch to DO'}
+                        </button>
+                      ) : order.status === 'processing' && order.deliveryOrder ? (
+                        <span className="text-purple-600">DO: {order.deliveryOrder.doNumber}</span>
+                      ) : order.status === 'completed' ? (
+                        <span className="text-green-600">Completed</span>
+                      ) : order.status === 'rejected' ? (
+                        <span className="text-red-600">Rejected</span>
                       ) : (
-                        <span>--</span>
+                        <span className="text-gray-600">No actions</span>
                       )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    <div className="space-y-1">
-                      {order.items && order.items.length > 0 ? (
-                        order.items.map((item, idx) => (
-                          <div key={typeof item.productId === 'object' && item.productId !== null ? String(item.productId._id) : String(item.productId) || String(idx)}>
-                            {item.quantity}
+                    </td>
+                  </tr>
+                  {expandedOrderIdRef.current === order.id && order.deliveryOrder && (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-4 bg-gray-50">
+                        <div className="bg-white p-4 rounded-lg shadow">
+                          <h4 className="font-medium text-gray-900 mb-2">Delivery Order: {order.deliveryOrder.doNumber}</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                            <div>
+                              <p className="text-sm text-gray-500">PO Number</p>
+                              <p className="font-medium">{order.deliveryOrder.poNumber}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-500">Status</p>
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                order.deliveryOrder.status === 'pending' 
+                                  ? 'bg-yellow-100 text-yellow-800' 
+                                  : 'bg-green-100 text-green-800'
+                              }`}>
+                                {order.deliveryOrder.status.charAt(0).toUpperCase() + order.deliveryOrder.status.slice(1)}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-500">Delivery Date</p>
+                              <p className="font-medium">
+                                {dayjs(order.deliveryOrder.deliveryDate).format('MMM D, YYYY')}
+                              </p>
+                            </div>
                           </div>
-                        ))
-                      ) : (
-                        <span>--</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    ${typeof order.total === 'number' ? order.total.toFixed(2) : '0.00'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <select
-                      value={order.status}
-                      onChange={(e) => handleStatusChange(order.id, e.target.value as Order['status'])}
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="processing">Processing</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {order.createdAt && dayjs(order.createdAt).isValid() ? dayjs(order.createdAt).format('YYYY-MM-DD') : '--'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button
-                      onClick={() => handleViewOrder(order)}
-                      className="text-primary-600 hover:text-primary-900"
-                    >
-                      View Details
-                    </button>
-                  </td>
-                </tr>
+                          <div className="mb-4">
+                            <h5 className="font-medium text-gray-900 mb-2">Items</h5>
+                            <div className="overflow-x-auto">
+                              <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                  {order.deliveryOrder.items.map((item, idx) => (
+                                    <tr key={idx}>
+                                      <td className="px-3 py-2 whitespace-nowrap text-sm">
+                                        {typeof item.product === 'object' ? item.product.name : item.product}
+                                      </td>
+                                      <td className="px-3 py-2 whitespace-nowrap text-sm">{item.quantity}</td>
+                                      <td className="px-3 py-2 whitespace-nowrap text-sm">${item.price.toFixed(2)}</td>
+                                      <td className="px-3 py-2 whitespace-nowrap text-sm">${(item.quantity * item.price).toFixed(2)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <div>
+                              {order.deliveryOrder.transportInfo && (
+                                <>
+                                  <p className="text-sm text-gray-500">Transport Info</p>
+                                  <p className="text-sm">
+                                    {order.deliveryOrder.transportInfo.transporter}
+                                    {order.deliveryOrder.transportInfo.vehicleNumber && 
+                                      ` (${order.deliveryOrder.transportInfo.vehicleNumber})`}
+                                  </p>
+                                </>
+                              )}
+                            </div>
+                            <div className="space-x-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleUpdateDeliveryStatus(order.deliveryOrder!.id, 'pending');
+                                }}
+                                disabled={deliveryStatus[order.deliveryOrder!.id] === 'loading'}
+                                className={`px-3 py-1 rounded text-sm ${
+                                  order.deliveryOrder.status === 'pending'
+                                    ? 'bg-yellow-100 text-yellow-800 cursor-default'
+                                    : 'bg-yellow-500 text-white hover:bg-yellow-600'
+                                }`}
+                              >
+                                {deliveryStatus[order.deliveryOrder.id] === 'loading' 
+                                  ? 'Updating...' 
+                                  : 'Mark as Pending'}
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleUpdateDeliveryStatus(order.deliveryOrder!.id, 'delivered');
+                                }}
+                                disabled={deliveryStatus[order.deliveryOrder!.id] === 'loading'}
+                                className={`px-3 py-1 rounded text-sm ${
+                                  order.deliveryOrder.status === 'delivered'
+                                    ? 'bg-green-100 text-green-800 cursor-default'
+                                    : 'bg-green-500 text-white hover:bg-green-600'
+                                }`}
+                              >
+                                {deliveryStatus[order.deliveryOrder.id] === 'loading' 
+                                  ? 'Updating...' 
+                                  : 'Mark as Delivered'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
@@ -486,7 +910,7 @@ export default function OrderManagementPage() {
                   id="customer-select"
                   value={formData.customerId || ''}
                   onChange={(e) => {
-                    const selectedCustomer = customers.find(c => c.id === e.target.value);
+                    const selectedCustomer = customersRef.current.find(c => c.id === e.target.value);
                     setFormData(prev => ({
                       ...prev,
                       customerId: e.target.value,
@@ -498,7 +922,7 @@ export default function OrderManagementPage() {
                 >
                   <option value="">Select a customer</option>
                   {/* Show all customers */}
-                  {customers.map((customer) => (
+                  {customersRef.current.map((customer) => (
                     <option key={customer.id} value={customer.id}>
                       {customer.name}
                     </option>
@@ -515,7 +939,7 @@ export default function OrderManagementPage() {
                         id={`product-select-${index}`}
                         value={typeof item.productId === 'object' && item.productId !== null ? item.productId._id : item.productId}
                         onChange={(e) => {
-                          const selectedProduct = products.find(p => p.id === e.target.value);
+                          const selectedProduct = productsRef.current.find(p => p.id === e.target.value);
                           const newItems = [...formData.items];
                           newItems[index] = {
                             ...newItems[index],
@@ -529,7 +953,7 @@ export default function OrderManagementPage() {
                         required
                       >
                         <option value="">Select a product</option>
-                        {products.map((product) => (
+                        {productsRef.current.map((product) => (
                           <option key={product.id} value={product.id}>{product.name}</option>
                         ))}
                       </select>

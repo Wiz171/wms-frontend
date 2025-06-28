@@ -212,11 +212,24 @@ export default function OrderManagementPage() {
           : item.productId,
         quantity: item.quantity,
         price: item.price,
+        productName: typeof item.productId === 'object' && item.productId !== null && 'name' in item.productId
+          ? item.productId.name
+          : getProductName(item.productId as string)
       })),
       expectedDeliveryDate: order.expectedDeliveryDate
         ? order.expectedDeliveryDate.substring(0, 10)
         : '',
     });
+    
+    // Make sure the customer is in the customers list
+    if (order.customerId && !customers.some(c => c.id === order.customerId)) {
+      // If customer not in the list, add it
+      setCustomers(prev => [...prev, { 
+        id: order.customerId, 
+        name: order.customerName || `Customer ${order.customerId.slice(-4)}` 
+      }]);
+    }
+    
     setIsModalOpen(true);
   };
 
@@ -440,10 +453,18 @@ export default function OrderManagementPage() {
                   className="input-field mt-1"
                   required
                 >
-                  <option value="">Select a customer</option>
+                  {!formData.customerId && <option value="">Select a customer</option>}
                   {customers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>{customer.name}</option>
+                    <option key={customer.id} value={customer.id}>
+                      {customer.name}
+                    </option>
                   ))}
+                  {/* Show current customer even if not in the dropdown list */}
+                  {editingOrder && !customers.some(c => c.id === formData.customerId) && (
+                    <option value={formData.customerId}>
+                      {editingOrder.customerName || `Customer ${formData.customerId.slice(-4)}`}
+                    </option>
+                  )}
                 </select>
               </div>
               <div>

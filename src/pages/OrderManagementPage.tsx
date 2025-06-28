@@ -30,6 +30,7 @@ interface OrderItem {
 
 interface OrderFormData {
   customerId: string;
+  customerName?: string;
   items: OrderItem[];
   expectedDeliveryDate?: string;
 }
@@ -219,9 +220,15 @@ export default function OrderManagementPage() {
     // Ensure we have the latest customers data
     await fetchCustomers();
     
+    // Get the customer name from the order or find it in the customers list
+    const customerName = order.customerName || 
+      customers.find(c => c.id === order.customerId)?.name || 
+      '';
+    
     // Update form data with order details
     const formDataUpdate: OrderFormData = {
       customerId: order.customerId,
+      customerName: customerName,
       items: order.items.map(item => ({
         productId: typeof item.productId === 'object' && item.productId !== null && '_id' in item.productId
           ? item.productId._id
@@ -477,33 +484,25 @@ export default function OrderManagementPage() {
                 <label htmlFor="customer-select" className="block text-sm font-medium text-gray-700">Customer</label>
                 <select
                   id="customer-select"
-                  value={editingOrder?.customerId || formData.customerId || ''}
+                  value={formData.customerId || ''}
                   onChange={(e) => {
                     const selectedCustomer = customers.find(c => c.id === e.target.value);
-                    setFormData({
-                      ...formData,
+                    setFormData(prev => ({
+                      ...prev,
                       customerId: e.target.value,
                       customerName: selectedCustomer?.name || ''
-                    });
+                    }));
                   }}
                   className="input-field mt-1"
                   required
                 >
                   <option value="">Select a customer</option>
-                  {/* Current customer first */}
-                  {editingOrder?.customerId && (
-                    <option value={editingOrder.customerId}>
-                      {editingOrder.customerName || `Customer ${editingOrder.customerId?.slice(-4) || ''}`}
+                  {/* Show all customers */}
+                  {customers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.name}
                     </option>
-                  )}
-                  {/* Other customers */}
-                  {customers
-                    .filter(customer => !editingOrder || customer.id !== editingOrder.customerId)
-                    .map((customer) => (
-                      <option key={customer.id} value={customer.id}>
-                        {customer.name}
-                      </option>
-                    ))}
+                  ))}
                 </select>
               </div>
               <div>

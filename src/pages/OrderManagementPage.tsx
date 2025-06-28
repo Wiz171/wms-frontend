@@ -474,27 +474,30 @@ export default function OrderManagementPage() {
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label htmlFor="customer-select" className="block text-sm font-medium text-gray-700">Customer</label>
-                <select
-                  id="customer-select"
-                  value={formData.customerId || ''}
-                  onChange={(e) => setFormData({ ...formData, customerId: e.target.value })}
-                  className="input-field mt-1"
-                  required
-                >
-                  <option value="">Select a customer</option>
-                  {customers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.name}
-                    </option>
-                  ))}
-                  {/* Always show the current customer as an option when editing */}
-                  {editingOrder && editingOrder.customerId && (
-                    <option value={editingOrder.customerId}>
-                      {editingOrder.customerName || `Customer ${editingOrder.customerId.slice(-4)}`}
-                    </option>
-                  )}
-                </select>
+                <label className="block text-sm font-medium text-gray-700">Customer</label>
+                {editingOrder ? (
+                  <div className="mt-1 p-2 bg-gray-100 rounded-md">
+                    <p className="text-gray-900">
+                      {editingOrder.customerName || `Customer ${editingOrder.customerId?.slice(-4) || ''}`}
+                    </p>
+                    <input type="hidden" name="customerId" value={editingOrder.customerId} />
+                  </div>
+                ) : (
+                  <select
+                    id="customer-select"
+                    value={formData.customerId || ''}
+                    onChange={(e) => setFormData({ ...formData, customerId: e.target.value })}
+                    className="input-field mt-1"
+                    required
+                  >
+                    <option value="">Select a customer</option>
+                    {customers.map((customer) => (
+                      <option key={customer.id} value={customer.id}>
+                        {customer.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Items</label>

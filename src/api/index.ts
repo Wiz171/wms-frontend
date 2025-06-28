@@ -6,6 +6,13 @@ const createHeaders = (url: string, options: RequestInit = {}): Headers => {
   const headers = new Headers(options.headers);
   const token = localStorage.getItem('token');
   
+  console.log('Creating headers for URL:', url);
+  console.log('Token exists:', !!token);
+  if (token) {
+    console.log('Token length:', token.length);
+    console.log('Token prefix:', token.substring(0, 5) + '...');
+  }
+  
   // Set default headers if not provided
   if (!headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
@@ -16,8 +23,13 @@ const createHeaders = (url: string, options: RequestInit = {}): Headers => {
   
   // Add auth token if available and not an auth endpoint
   const isAuthEndpoint = url.includes('/login') || url.includes('/logout');
+  console.log('Is auth endpoint:', isAuthEndpoint);
+  
   if (token && !isAuthEndpoint) {
+    console.log('Adding Authorization header with token');
     headers.set('Authorization', `Bearer ${token}`);
+  } else if (!token && !isAuthEndpoint) {
+    console.warn('No token available for non-auth endpoint:', url);
   }
   
   return headers;
@@ -84,6 +96,7 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
   
   // Create headers with auth token
   const headers = createHeaders(url, options);
+  const token = localStorage.getItem('token');
 
   try {
     // Create a headers object for logging (redacting sensitive info)
@@ -97,6 +110,9 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
       method: options.method || 'GET',
       headers: logHeaders,
       body: options.body,
+      hasToken: !!token,
+      tokenLength: token ? token.length : 0,
+      tokenPrefix: token ? token.substring(0, 10) + '...' : 'none'
     });
 
     const fetchOptions: RequestInit = {
@@ -116,29 +132,36 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
       mode: fetchOptions.mode
     });
 
-    const res = await fetch(processedUrl, fetchOptions);
+    const response = await fetch(processedUrl, fetchOptions);
+    let responseData;
+    
+    try {
+      responseData = await response.json();
+    } catch (e) {
+      responseData = { message: 'Invalid JSON response' };
+    }
 
-    const data = await res.json();
-
+    // Log the response for debugging
     console.log('API Response:', {
       url: processedUrl,
-      status: res.status,
-      ok: res.ok,
-      data,
+      status: response.status,
+      ok: response.ok,
+      statusText: response.statusText,
+      headers: Object.fromEntries(response.headers.entries()),
+      data: responseData,
     });
 
-    if (!res.ok) {
-      // Handle authentication errors
-      if (res.status === 401) {
-        // Handle unauthorized (token expired or invalid)
+    if (!response.ok) {
+      // Handle 401/403 specifically
+      if (response.status === 401 || response.status === 403) {
+        console.error('Auth error - Token might be invalid or expired');
+        // Clear invalid token
         localStorage.removeItem('token');
-        if (url === '/login') {
-          // Show backend error message for login
-          throw new ApiError(data?.message || 'Invalid email or password', res.status, data, processedUrl);
-        } else {
-          window.location.href = '/login';
-          throw new ApiError('Session expired. Please login again.', res.status, data, processedUrl);
+        // Redirect to login page
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
         }
+        throw new ApiError('Session expired. Please login again.', response.status, responseData, processedUrl);
       }
       throw new ApiError(data?.message || data?.error || 'API request failed', res.status, data, processedUrl);
     }

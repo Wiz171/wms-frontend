@@ -377,17 +377,8 @@ export default function OrderManagementPage() {
   const fetchOrders = async () => {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No authentication token found');
-      }
-
-      const data = await apiRequest('/api/orders', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      
+      const data = await apiRequest('/api/orders');
       
       console.log('Fetched orders:', data);
       if (Array.isArray(data)) {
@@ -420,17 +411,7 @@ export default function OrderManagementPage() {
 
   const fetchCustomers = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No authentication token found');
-      }
-
-      const data = await apiRequest('/api/customers', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const data = await apiRequest('/api/customers');
       
       if (Array.isArray(data)) {
         const customerOptions: CustomerOption[] = data.map((c: { _id?: string; id?: string; name: string }) => ({
@@ -454,17 +435,7 @@ export default function OrderManagementPage() {
 
   const fetchProducts = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No authentication token found');
-      }
-
-      const data = await apiRequest<{ products: { _id?: string; id?: string; name: string; price: number }[] }>('/api/products', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const data = await apiRequest<{ products: { _id?: string; id?: string; name: string; price: number }[] }>('/api/products');
       
       if (Array.isArray(data?.products)) {
         const productOptions: ProductOption[] = data.products.map((p) => ({

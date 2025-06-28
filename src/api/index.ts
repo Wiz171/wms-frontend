@@ -172,7 +172,7 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
 
     // For login/register endpoints, return the entire response
     if (url === '/login' || url === '/register') {
-      return data as T;
+      return responseData as T;
     }
 
     // For other endpoints, return the data property if it exists

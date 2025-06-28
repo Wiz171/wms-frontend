@@ -137,6 +137,7 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
     
     try {
       responseData = await response.json();
+      console.log('Response Data:', responseData);
     } catch (e) {
       responseData = { message: 'Invalid JSON response' };
     }

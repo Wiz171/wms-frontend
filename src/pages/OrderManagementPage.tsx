@@ -76,13 +76,23 @@ export default function OrderManagementPage() {
   const fetchOrders = async () => {
     try {
       const data = await apiRequest('/api/orders');
+      console.log('Fetched orders:', data);
       if (Array.isArray(data)) {
-        const mappedOrders = data.map((order: any) => ({ ...order, id: order._id }));
+        const mappedOrders = data.map((order: any) => ({
+          ...order,
+          id: order._id || order.id,
+          // Ensure customerName is set, falling back to customer.name or empty string
+          customerName: order.customerName || (order.customer && order.customer.name) || '',
+          // Ensure customerId is set, falling back to customer._id or customer.id
+          customerId: order.customerId || (order.customer && (order.customer._id || order.customer.id)) || ''
+        }));
+        console.log('Mapped orders:', mappedOrders);
         setOrders(mappedOrders);
       } else {
         setOrders([]);
       }
     } catch (error) {
+      console.error('Error fetching orders:', error);
       toast.error('Failed to fetch orders');
     } finally {
       setLoading(false);
@@ -202,9 +212,15 @@ export default function OrderManagementPage() {
     }
   };
 
-  const handleEdit = (order: Order) => {
+  const handleEdit = async (order: Order) => {
+    console.log('Editing order:', order);
     setEditingOrder(order);
-    setFormData({
+    
+    // Ensure we have the latest customers data
+    await fetchCustomers();
+    
+    // Update form data with order details
+    const formDataUpdate: OrderFormData = {
       customerId: order.customerId,
       items: order.items.map(item => ({
         productId: typeof item.productId === 'object' && item.productId !== null && '_id' in item.productId
@@ -219,18 +235,31 @@ export default function OrderManagementPage() {
       expectedDeliveryDate: order.expectedDeliveryDate
         ? order.expectedDeliveryDate.substring(0, 10)
         : '',
-    });
+    };
     
-    // Make sure the customer is in the customers list
-    if (order.customerId && !customers.some(c => c.id === order.customerId)) {
-      // If customer not in the list, add it
-      setCustomers(prev => [...prev, { 
-        id: order.customerId, 
-        name: order.customerName || `Customer ${order.customerId.slice(-4)}` 
-      }]);
+    console.log('Setting form data:', formDataUpdate);
+    setFormData(formDataUpdate);
+    
+    // If customer is not in the customers list, add it
+    const customerExists = customers.some(c => c.id === order.customerId);
+    console.log('Customer exists in list:', customerExists, 'Customer ID:', order.customerId);
+    
+    if (order.customerId && !customerExists) {
+      console.log('Adding customer to list:', { id: order.customerId, name: order.customerName });
+      setCustomers(prev => [
+        ...prev, 
+        { 
+          id: order.customerId, 
+          name: order.customerName || `Customer ${order.customerId.slice(-4)}` 
+        }
+      ]);
     }
     
-    setIsModalOpen(true);
+    // Force a re-render of the dropdown by toggling the modal
+    setIsModalOpen(false);
+    setTimeout(() => {
+      setIsModalOpen(true);
+    }, 50);
   };
 
   const handleViewOrder = (order: Order) => setViewOrder(order);
@@ -448,21 +477,21 @@ export default function OrderManagementPage() {
                 <label htmlFor="customer-select" className="block text-sm font-medium text-gray-700">Customer</label>
                 <select
                   id="customer-select"
-                  value={formData.customerId}
+                  value={formData.customerId || ''}
                   onChange={(e) => setFormData({ ...formData, customerId: e.target.value })}
                   className="input-field mt-1"
                   required
                 >
-                  {!formData.customerId && <option value="">Select a customer</option>}
+                  <option value="">Select a customer</option>
                   {customers.map((customer) => (
                     <option key={customer.id} value={customer.id}>
                       {customer.name}
                     </option>
                   ))}
-                  {/* Show current customer even if not in the dropdown list */}
-                  {editingOrder && !customers.some(c => c.id === formData.customerId) && (
-                    <option value={formData.customerId}>
-                      {editingOrder.customerName || `Customer ${formData.customerId.slice(-4)}`}
+                  {/* Always show the current customer as an option when editing */}
+                  {editingOrder && editingOrder.customerId && (
+                    <option value={editingOrder.customerId}>
+                      {editingOrder.customerName || `Customer ${editingOrder.customerId.slice(-4)}`}
                     </option>
                   )}
                 </select>

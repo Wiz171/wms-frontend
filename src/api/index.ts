@@ -177,7 +177,7 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
     }
 
     // For other endpoints, return the data property if it exists
-    return data.data || data;
+    return responseData.data || responseData;
   } catch (err) {
     console.error('API Error:', {
       url: processedUrl,

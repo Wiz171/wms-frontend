@@ -376,7 +376,19 @@ export default function OrderManagementPage() {
 
   const fetchOrders = async () => {
     try {
-      const data = await apiRequest('/api/orders');
+      setIsLoading(true);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const data = await apiRequest('/api/orders', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
       console.log('Fetched orders:', data);
       if (Array.isArray(data)) {
         const mappedOrders = data.map((order: any) => ({
@@ -394,15 +406,32 @@ export default function OrderManagementPage() {
       }
     } catch (error) {
       console.error('Error fetching orders:', error);
-      toast.error('Failed to fetch orders');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch orders';
+      toast.error(errorMessage);
+      
+      // Redirect to login if unauthorized
+      if (error instanceof Error && error.message.includes('401') || error.message.includes('403')) {
+        window.location.href = '/login';
+      }
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   const fetchCustomers = async () => {
     try {
-      const data = await apiRequest('/api/customers');
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const data = await apiRequest('/api/customers', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
       if (Array.isArray(data)) {
         const customerOptions: CustomerOption[] = data.map((c: { _id?: string; id?: string; name: string }) => ({
           id: c._id || c.id || '',
@@ -413,14 +442,31 @@ export default function OrderManagementPage() {
         setCustomersWrapper([]);
       }
     } catch (error) {
-      toast.error('Failed to fetch customers');
+      console.error('Error fetching customers:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch customers';
+      toast.error(errorMessage);
+      
+      if (error instanceof Error && (error.message.includes('401') || error.message.includes('403'))) {
+        window.location.href = '/login';
+      }
     }
   };
 
   const fetchProducts = async () => {
     try {
-      const data = await apiRequest<{ products: { _id?: string; id?: string; name: string; price: number }[] }>('/api/products');
-      if (Array.isArray(data.products)) {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const data = await apiRequest<{ products: { _id?: string; id?: string; name: string; price: number }[] }>('/api/products', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (Array.isArray(data?.products)) {
         const productOptions: ProductOption[] = data.products.map((p) => ({
           id: p._id || p.id || '',
           name: p.name,

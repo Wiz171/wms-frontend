@@ -22,9 +22,9 @@ export default function TaskManagementPage() {
 
   const fetchOrders = async () => {
     try {
-      const data = await apiRequest('/api/purchase-orders');
+      const data: any[] = await apiRequest('/api/purchase-orders');
       setOrders(Array.isArray(data) ? data : []);
-      if (data.length > 0) setSelectedOrder(data[0]._id);
+      if (Array.isArray(data) && data.length > 0) setSelectedOrder(data[0]._id);
     } catch {
       toast.error('Failed to fetch purchase orders');
     }

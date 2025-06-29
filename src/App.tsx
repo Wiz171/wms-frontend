@@ -7,7 +7,7 @@ import Dashboard from './pages/Dashboard';
 import UserManagementPage from './pages/UserManagementPage';
 import ProductManagementPage from './pages/ProductManagementPage';
 import CustomerManagementPage from './pages/CustomerManagementPage';
-import OrderManagementPage from './pages/OrderManagementPage';
+import POManagementPage from './pages/POManagementPage';
 import TaskManagementPage from './pages/TaskManagementPage';
 import RoleManagementPage from './pages/RoleManagementPage';
 import UserProfilePage from './pages/UserProfilePage';
@@ -163,7 +163,7 @@ function App() {
           element={
             user ? (
               <Layout user={user} onLogout={handleLogout}>
-                <OrderManagementPage />
+                <POManagementPage />
               </Layout>
             ) : (
               <Navigate to="/login" replace />

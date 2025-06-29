@@ -69,7 +69,7 @@ export default function POManagementPage() {
 
   const handleGenerateInvoice = async (id: string) => {
     try {
-      const res = await apiRequest(`/api/purchase-orders/${id}/invoice`, { method: 'PATCH' });
+      const res = await apiRequest(`/api/purchase-orders/${id}/invoice`, { method: 'PATCH' }) as { invoiceUrl?: string };
       toast.success('Invoice generated');
       fetchOrders();
       if (res.invoiceUrl) window.open(res.invoiceUrl, '_blank');

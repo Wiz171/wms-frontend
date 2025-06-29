@@ -52,6 +52,7 @@ interface UserOption {
   email: string;
 }
 
+// This file is deprecated and replaced by POManagementPage.tsx
 export default function OrderManagementPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);

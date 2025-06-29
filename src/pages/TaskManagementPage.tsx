@@ -22,27 +22,19 @@ export default function TaskManagementPage() {
 
   const fetchOrders = async () => {
     try {
-      const data = await apiRequest('/api/orders');
-      if (Array.isArray(data)) {
-        setOrders(data);
-        if (data.length > 0) setSelectedOrder(data[0]._id);
-      } else {
-        setOrders([]);
-      }
+      const data = await apiRequest('/api/purchase-orders');
+      setOrders(Array.isArray(data) ? data : []);
+      if (data.length > 0) setSelectedOrder(data[0]._id);
     } catch {
-      toast.error('Failed to fetch orders');
+      toast.error('Failed to fetch purchase orders');
     }
   };
 
-  const fetchTasks = async (orderId: string) => {
+  const fetchTasks = async (poId: string) => {
     setLoading(true);
     try {
-      const data = await apiRequest(`/api/orders/${orderId}/tasks`);
-      if (Array.isArray(data)) {
-        setTasks(data);
-      } else {
-        setTasks([]);
-      }
+      const data = await apiRequest(`/api/purchase-orders/${poId}/tasks`);
+      setTasks(Array.isArray(data) ? data : []);
     } catch {
       setTasks([]);
       toast.error('Failed to fetch tasks');
@@ -57,7 +49,7 @@ export default function TaskManagementPage() {
         method: 'POST',
         body: JSON.stringify({
           ...values,
-          orderId: values.orderId,
+          purchaseOrderId: values.orderId,
         }),
       });
       setTasks((prev) => Array.isArray(prev) && newTask && typeof newTask === 'object' ? [...prev, newTask as Task] : prev);
@@ -92,7 +84,7 @@ export default function TaskManagementPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
         <div>
-          <label className="font-medium mr-2">Order:</label>
+          <label className="font-medium mr-2">PO:</label>
           <select
             value={selectedOrder}
             onChange={(e) => setSelectedOrder(e.target.value)}
@@ -100,7 +92,7 @@ export default function TaskManagementPage() {
           >
             {orders.map((order) => (
               <option key={order._id} value={order._id}>
-                {order.name || order.orderNumber || `Order #${order._id.substring(order._id.length - 6)}`}
+                {order._id.slice(-6)} | {order.status} | {order.deliveryDate?.slice(0, 10)}
               </option>
             ))}
           </select>

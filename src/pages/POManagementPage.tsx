@@ -117,6 +117,34 @@ export default function POManagementPage() {
     }
   };
 
+  const handleApprove = async (id: string) => {
+    if (!window.confirm('Are you sure you want to approve this PO?')) return;
+    try {
+      await apiRequest(`/api/purchase-orders/${id}/approve`, { method: 'PATCH' });
+      toast.success('PO approved successfully');
+      fetchOrders();
+    } catch (err: any) {
+      showApiError(err, 'Failed to approve PO');
+    }
+  };
+
+  const handleReject = async (id: string) => {
+    const reason = prompt('Please enter the reason for rejection:');
+    if (!reason) return;
+    
+    try {
+      await apiRequest(`/api/purchase-orders/${id}/reject`, { 
+        method: 'PATCH',
+        body: JSON.stringify({ reason }),
+        headers: { 'Content-Type': 'application/json' }
+      });
+      toast.success('PO rejected successfully');
+      fetchOrders();
+    } catch (err: any) {
+      showApiError(err, 'Failed to reject PO');
+    }
+  };
+
   const handleCreatePO = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
@@ -286,9 +314,22 @@ export default function POManagementPage() {
                 <td className="px-4 py-2">{order.doCreated ? 'Yes' : 'No'}</td>
                 <td className="px-4 py-2">{order.invoiceUrl ? <a href={order.invoiceUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">View</a> : '--'}</td>
                 <td className="px-4 py-2 space-x-2">
-                  {/* Approve: only for manager, pending, not cancelled/delivered */}
+                  {/* Approve/Reject: only for manager, pending, not cancelled/delivered */}
                   {currentUser?.role === 'manager' && order.status === 'pending' && !isInactive(order) && (
-                    <button onClick={() => handleApprove(order.id)} className="btn-primary btn-xs">Approve</button>
+                    <>
+                      <button 
+                        onClick={() => handleApprove(order.id)} 
+                        className="btn btn-success btn-xs mr-2"
+                      >
+                        Approve
+                      </button>
+                      <button 
+                        onClick={() => handleReject(order.id)} 
+                        className="btn btn-error btn-xs"
+                      >
+                        Reject
+                      </button>
+                    </>
                   )}
                   {/* Create Task: only for manager, processing, not cancelled/delivered */}
                   {currentUser?.role === 'manager' && order.status === 'processing' && !isInactive(order) && (

@@ -18,6 +18,7 @@ interface Product {
   stock: number;
   sku: string;
   createdAt: string;
+  createdBy?: string | { _id: string; name?: string; email?: string };
 }
 
 interface ProductFormData {
@@ -46,6 +47,17 @@ export default function ProductManagementPage() {
     specs: [{ key: '', value: '' }],
   });
 
+  // Get current user from localStorage
+  const currentUser = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('user') || '{}');
+    } catch {
+      return {};
+    }
+  })();
+  const currentUserId = currentUser?._id || currentUser?.id || '';
+  const currentUserRole = currentUser?.role || localStorage.getItem('role') || '';
+
   useEffect(() => {
     fetchProducts();
   }, []);
@@ -57,10 +69,12 @@ export default function ProductManagementPage() {
         const mappedProducts = data.map((product: any) => ({
           ...product,
           id: product._id,
-      }));
-      setProducts(mappedProducts);
-    }
-   } catch (error) {
+          // Preserve the full createdBy object for name/email display
+          createdBy: product.createdBy || undefined,
+        }));
+        setProducts(mappedProducts);
+      }
+    } catch (error) {
       toast.error('Failed to fetch products');
     } finally {
       setLoading(false);
@@ -221,53 +235,79 @@ export default function ProductManagementPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   SKU
                 </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Created By
+                </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredProducts.map((product) => (
-                <tr key={product.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4">
-                    <div className="text-sm font-medium text-gray-900">{product.name}</div>
-                    <div className="text-sm text-gray-500">{product.description}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                      {product.category}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    ${product.price.toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                      ${product.stock > 10 ? 'bg-green-100 text-green-800' :
-                        product.stock > 0 ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-red-100 text-red-800'}`}>
-                      {product.stock} in stock
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {product.sku}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => handleEdit(product)}
-                      className="text-primary-600 hover:text-primary-900 mr-4"
-                    >
-                      <PencilIcon className="h-5 w-5" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(product.id)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      <TrashIcon className="h-5 w-5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {filteredProducts.map((product) => {
+                // Determine if edit is allowed
+                const canEdit =
+                  currentUserRole === 'superadmin' ||
+                  (currentUserRole === 'manager' && product.createdBy === currentUserId);
+                return (
+                  <tr key={product.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-medium text-gray-900">{product.name}</div>
+                      <div className="text-sm text-gray-500">{product.description}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                        {product.category}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      ${product.price.toFixed(2)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                        ${product.stock > 10 ? 'bg-green-100 text-green-800' :
+                          product.stock > 0 ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'}`}>
+                        {product.stock} in stock
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {product.sku}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {(() => {
+                        if (product.createdBy && typeof product.createdBy === 'object' && 'name' in product.createdBy) {
+                          return product.createdBy.name || product.createdBy.email || product.createdBy._id || 'Unknown';
+                        } else if (typeof product.createdBy === 'string') {
+                          return product.createdBy;
+                        } else {
+                          return 'Unknown';
+                        }
+                      })()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button
+                        onClick={() => handleEdit(product)}
+                        className={`text-primary-600 hover:text-primary-900 mr-4 ${!canEdit ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        disabled={!canEdit}
+                        title={
+                          !canEdit && currentUserRole === 'manager'
+                            ? 'Managers can only edit products they created.'
+                            : undefined
+                        }
+                      >
+                        <PencilIcon className="h-5 w-5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(product.id)}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        <TrashIcon className="h-5 w-5" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
